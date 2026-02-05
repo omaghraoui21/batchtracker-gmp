@@ -1,0 +1,98 @@
+// Thème professionnel médical/pharmaceutique
+export const Colors = {
+  primary: '#0066CC', // Bleu Médical
+  secondary: '#004C99',
+  background: '#F5F7FA',
+  surface: '#FFFFFF',
+  text: {
+    primary: '#2C3E50', // Gris Ardoise foncé
+    secondary: '#5A6C7D',
+    tertiary: '#8B9DAD',
+  },
+  accent: '#00A86B', // Vert pour succès
+  warning: '#FFA726',
+  error: '#E53935',
+  success: '#00A86B',
+  border: '#E1E8ED',
+  inactive: '#CBD5E0',
+};
+
+export const Spacing = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 48,
+};
+
+export const BorderRadius = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  full: 9999,
+};
+
+export const Shadows = {
+  sm: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  md: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  lg: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+};
+
+export const Typography = {
+  h1: {
+    fontSize: 32,
+    fontWeight: '700' as const,
+    lineHeight: 40,
+    color: Colors.text.primary,
+  },
+  h2: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    lineHeight: 32,
+    color: Colors.text.primary,
+  },
+  h3: {
+    fontSize: 20,
+    fontWeight: '600' as const,
+    lineHeight: 28,
+    color: Colors.text.primary,
+  },
+  body: {
+    fontSize: 16,
+    fontWeight: '400' as const,
+    lineHeight: 24,
+    color: Colors.text.primary,
+  },
+  caption: {
+    fontSize: 14,
+    fontWeight: '400' as const,
+    lineHeight: 20,
+    color: Colors.text.secondary,
+  },
+  small: {
+    fontSize: 12,
+    fontWeight: '400' as const,
+    lineHeight: 16,
+    color: Colors.text.tertiary,
+  },
+};
