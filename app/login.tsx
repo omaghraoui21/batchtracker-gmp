@@ -7,32 +7,119 @@ import {
   Platform,
   ScrollView,
   Alert,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
+import { runDiagnostics, testAuthentication } from '@/utils/supabaseTest';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { login } = useAuth();
   const router = useRouter();
 
   const handleLogin = async () => {
     if (!email || !password) {
+      setError('Veuillez remplir tous les champs');
       Alert.alert('Erreur', 'Veuillez remplir tous les champs');
       return;
     }
 
     setLoading(true);
+    setError(null);
+
+    console.log('[Login] Starting login for:', email);
+
     try {
-      await login(email, password);
+      await login(email.trim().toLowerCase(), password);
+      console.log('[Login] Login successful, navigating to dashboard');
       router.replace('/(tabs)/dashboard');
     } catch (error) {
-      Alert.alert('Erreur de connexion', (error as Error).message);
+      const errorMessage = (error as Error).message;
+      console.error('[Login] Login failed:', errorMessage);
+      setError(errorMessage);
+      Alert.alert('Erreur de connexion', errorMessage, [
+        { text: 'OK', style: 'default' },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fillAdminCredentials = () => {
+    setEmail('omaghraoui@gmail.com');
+    setPassword('pilote');
+    setError(null);
+  };
+
+  const runConnectionDiagnostics = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('[Login] Running diagnostics...');
+      const results = await runDiagnostics(email || undefined, password || undefined);
+
+      let message = '🔍 Résultats du diagnostic:\n\n';
+
+      // Environment check
+      message += `✅ Variables d'env: ${results.environment.success ? 'OK' : '❌ ERREUR'}\n`;
+      message += `${results.environment.message}\n\n`;
+
+      // Connection check
+      message += `${results.connection.success ? '✅' : '❌'} Connexion: ${results.connection.message}\n\n`;
+
+      // Authentication check (if credentials provided)
+      if (results.authentication) {
+        message += `${results.authentication.success ? '✅' : '❌'} Auth: ${results.authentication.message}\n`;
+        if (results.authentication.details) {
+          message += `Détails: ${JSON.stringify(results.authentication.details, null, 2)}\n`;
+        }
+      }
+
+      Alert.alert('Diagnostic Supabase', message, [{ text: 'OK' }]);
+    } catch (error) {
+      console.error('[Login] Diagnostic error:', error);
+      Alert.alert('Erreur', 'Échec du diagnostic: ' + (error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testAdminLogin = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('[Login] Testing admin login...');
+      const result = await testAuthentication('omaghraoui@gmail.com', 'pilote');
+
+      if (result.success) {
+        Alert.alert(
+          '✅ Test réussi',
+          `Authentification admin réussie!\n\nEmail: ${result.details?.email}\nRôle: ${result.details?.role}`,
+          [
+            {
+              text: 'Remplir les champs',
+              onPress: fillAdminCredentials,
+            },
+            { text: 'OK' },
+          ]
+        );
+      } else {
+        Alert.alert('❌ Test échoué', `${result.message}\n\nDétails: ${JSON.stringify(result.details, null, 2)}`);
+      }
+    } catch (error) {
+      console.error('[Login] Test error:', error);
+      Alert.alert('Erreur', 'Échec du test: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -58,11 +145,22 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.form}>
+          {__DEV__ && <ConnectionStatus />}
+
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>❌ {error}</Text>
+            </View>
+          )}
+
           <Input
             label="Email"
             placeholder="votre.email@pharma.com"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text) => {
+              setEmail(text);
+              setError(null);
+            }}
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
@@ -72,7 +170,10 @@ export default function LoginScreen() {
             label="Mot de passe"
             placeholder="••••••••"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => {
+              setPassword(text);
+              setError(null);
+            }}
             secureTextEntry
             autoComplete="password"
           />
@@ -84,6 +185,38 @@ export default function LoginScreen() {
             size="large"
             style={styles.loginButton}
           />
+
+          {__DEV__ && (
+            <>
+              <TouchableOpacity
+                onPress={fillAdminCredentials}
+                style={styles.debugButton}
+                disabled={loading}
+              >
+                <Text style={styles.debugButtonText}>
+                  🔧 Remplir identifiants admin
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.debugRow}>
+                <TouchableOpacity
+                  onPress={testAdminLogin}
+                  style={[styles.debugButton, styles.debugButtonSmall]}
+                  disabled={loading}
+                >
+                  <Text style={styles.debugButtonText}>🧪 Tester admin</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={runConnectionDiagnostics}
+                  style={[styles.debugButton, styles.debugButtonSmall]}
+                  disabled={loading}
+                >
+                  <Text style={styles.debugButtonText}>🔍 Diagnostic</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
 
           <Text style={styles.infoText}>
             🔒 Connexion sécurisée conforme aux normes GMP
@@ -141,8 +274,44 @@ const styles = StyleSheet.create({
   form: {
     marginBottom: Spacing.xl,
   },
+  errorContainer: {
+    backgroundColor: Colors.error + '15',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.error,
+    marginBottom: Spacing.md,
+  },
+  errorText: {
+    ...Typography.body,
+    color: Colors.error,
+    textAlign: 'center',
+  },
   loginButton: {
     marginTop: Spacing.md,
+  },
+  debugButton: {
+    marginTop: Spacing.sm,
+    padding: Spacing.sm,
+    backgroundColor: Colors.primary + '15',
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  debugRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  debugButtonSmall: {
+    flex: 1,
+    marginTop: 0,
+  },
+  debugButtonText: {
+    ...Typography.small,
+    color: Colors.primary,
+    textAlign: 'center',
+    fontWeight: '600',
   },
   infoText: {
     ...Typography.small,
