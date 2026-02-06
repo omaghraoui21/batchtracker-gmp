@@ -8,8 +8,8 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { useAuth, type AuthError } from '@/context/AuthContext';
 import { Input } from '@/components/Input';
@@ -17,12 +17,14 @@ import { Button } from '@/components/Button';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { runDiagnostics, testAuthentication } from '@/utils/supabaseTest';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { debugLogger } from '@/lib/debugLogger';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<AuthError | null>(null);
+  const [showRawError, setShowRawError] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
 
@@ -38,17 +40,22 @@ export default function LoginScreen() {
 
     setLoading(true);
     setError(null);
+    setShowRawError(false);
 
-    console.log('[Login] Starting login for:', email);
+    debugLogger.info('LoginScreen', 'Starting login', { email });
 
     try {
       await login(email.trim().toLowerCase(), password);
-      console.log('[Login] Login successful, navigating to dashboard');
+      debugLogger.info('LoginScreen', 'Login successful, navigating to dashboard');
       router.replace('/(tabs)/dashboard');
-    } catch (error: any) {
-      console.error('[Login] Login failed:', error);
+    } catch (err: any) {
+      debugLogger.error('LoginScreen', 'Login failed', {
+        type: err.type,
+        message: err.message,
+        rawErrorJson: err.rawErrorJson,
+      });
 
-      const authError = error as AuthError;
+      const authError = err as AuthError;
       setError(authError);
 
       // Show alert with appropriate actions
@@ -62,13 +69,11 @@ export default function LoginScreen() {
         });
       }
 
-      // Add diagnostics button for network errors
-      if (authError.type === 'network') {
-        alertButtons.unshift({
-          text: '🔍 Diagnostics',
-          onPress: () => router.push('/diagnostics'),
-        });
-      }
+      // Add diagnostics button for all errors
+      alertButtons.unshift({
+        text: '🔬 Diagnostic Avancé',
+        onPress: () => router.push('/diagnostics'),
+      });
 
       Alert.alert(
         authError.type === 'network'
@@ -84,6 +89,28 @@ export default function LoginScreen() {
     }
   };
 
+  const copyRawError = async () => {
+    if (!error?.rawErrorJson) return;
+    try {
+      const lastAttempt = debugLogger.getLastLoginAttempt();
+      let copyText = `=== Erreur Login GMP ===\n`;
+      copyText += `Date: ${new Date().toISOString()}\n`;
+      copyText += `Type: ${error.type}\n`;
+      copyText += `Message: ${error.message}\n\n`;
+      copyText += `=== Erreur Brute ===\n${error.rawErrorJson}\n`;
+
+      if (lastAttempt) {
+        copyText += `\n=== Dernière Tentative ===\n`;
+        copyText += JSON.stringify(lastAttempt, null, 2);
+      }
+
+      await Clipboard.setStringAsync(copyText);
+      Alert.alert('✅ Copié', 'L\'erreur a été copiée dans le presse-papiers.');
+    } catch {
+      Alert.alert('Erreur', 'Impossible de copier dans le presse-papiers.');
+    }
+  };
+
   const fillAdminCredentials = () => {
     setEmail('omaghraoui@gmail.com');
     setPassword('pilote');
@@ -95,7 +122,7 @@ export default function LoginScreen() {
     setError(null);
 
     try {
-      console.log('[Login] Running diagnostics...');
+      debugLogger.info('LoginScreen', 'Running diagnostics');
       const results = await runDiagnostics(email || undefined, password || undefined);
 
       let message = '🔍 Résultats du diagnostic:\n\n';
@@ -115,10 +142,13 @@ export default function LoginScreen() {
         }
       }
 
-      Alert.alert('Diagnostic Supabase', message, [{ text: 'OK' }]);
-    } catch (error) {
-      console.error('[Login] Diagnostic error:', error);
-      Alert.alert('Erreur', 'Échec du diagnostic: ' + (error as Error).message);
+      Alert.alert('Diagnostic Supabase', message, [
+        { text: '🔬 Diagnostic Avancé', onPress: () => router.push('/diagnostics') },
+        { text: 'OK' },
+      ]);
+    } catch (err) {
+      debugLogger.error('LoginScreen', 'Diagnostic error', err);
+      Alert.alert('Erreur', 'Échec du diagnostic: ' + (err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -129,7 +159,7 @@ export default function LoginScreen() {
     setError(null);
 
     try {
-      console.log('[Login] Testing admin login...');
+      debugLogger.info('LoginScreen', 'Testing admin login');
       const result = await testAuthentication('omaghraoui@gmail.com', 'pilote');
 
       if (result.success) {
@@ -147,9 +177,9 @@ export default function LoginScreen() {
       } else {
         Alert.alert('❌ Test échoué', `${result.message}\n\nDétails: ${JSON.stringify(result.details, null, 2)}`);
       }
-    } catch (error) {
-      console.error('[Login] Test error:', error);
-      Alert.alert('Erreur', 'Échec du test: ' + (error as Error).message);
+    } catch (err) {
+      debugLogger.error('LoginScreen', 'Test error', err);
+      Alert.alert('Erreur', 'Échec du test: ' + (err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -196,25 +226,53 @@ export default function LoginScreen() {
                 </Text>
               </View>
               <Text style={styles.errorText}>{error.message}</Text>
-              {error.type === 'network' && (
+
+              {/* Raw Error Section */}
+              {error.rawErrorJson && (
+                <TouchableOpacity
+                  onPress={() => setShowRawError(!showRawError)}
+                  style={styles.rawErrorToggle}
+                >
+                  <Text style={styles.rawErrorToggleText}>
+                    {showRawError ? '▼ Masquer détails techniques' : '▶ Voir détails techniques'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {showRawError && error.rawErrorJson && (
+                <View style={styles.rawErrorBox}>
+                  <Text style={styles.rawErrorText} selectable>
+                    {error.rawErrorJson}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.copyRawButton}
+                    onPress={copyRawError}
+                  >
+                    <Text style={styles.copyRawButtonText}>📋 Copier l&apos;erreur</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Action buttons */}
+              <View style={styles.errorActions}>
                 <TouchableOpacity
                   style={styles.diagnosticsButton}
                   onPress={() => router.push('/diagnostics')}
                 >
                   <Text style={styles.diagnosticsButtonText}>
-                    🔍 Lancer le diagnostic réseau
+                    🔬 Diagnostic Avancé
                   </Text>
                 </TouchableOpacity>
-              )}
-              {error.canRetry && (
-                <TouchableOpacity
-                  style={styles.retryButton}
-                  onPress={handleLogin}
-                  disabled={loading}
-                >
-                  <Text style={styles.retryButtonText}>🔄 Réessayer</Text>
-                </TouchableOpacity>
-              )}
+                {error.canRetry && (
+                  <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={handleLogin}
+                    disabled={loading}
+                  >
+                    <Text style={styles.retryButtonText}>🔄 Réessayer</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           )}
 
@@ -292,6 +350,14 @@ export default function LoginScreen() {
           <Text style={styles.footerText}>
             Besoin d&apos;aide ? Contactez l&apos;administrateur système
           </Text>
+          <TouchableOpacity
+            onPress={() => router.push('/diagnostics')}
+            style={styles.footerDiagLink}
+          >
+            <Text style={styles.footerDiagLinkText}>
+              Problèmes de connexion ? → Diagnostic réseau
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -340,11 +406,11 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   errorContainer: {
-    backgroundColor: Colors.error + '15',
+    backgroundColor: Colors.error + '10',
     padding: Spacing.md,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: Colors.error,
+    borderColor: Colors.error + '40',
     marginBottom: Spacing.md,
   },
   errorHeader: {
@@ -362,33 +428,75 @@ const styles = StyleSheet.create({
     color: Colors.error,
   },
   errorText: {
-    ...Typography.body,
+    ...Typography.caption,
     color: Colors.text.primary,
     marginBottom: Spacing.sm,
+    lineHeight: 20,
+  },
+
+  // Raw error display
+  rawErrorToggle: {
+    paddingVertical: Spacing.xs,
+  },
+  rawErrorToggleText: {
+    ...Typography.small,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  rawErrorBox: {
+    backgroundColor: Colors.background,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  rawErrorText: {
+    ...Typography.small,
+    fontFamily: 'monospace',
+    color: Colors.text.secondary,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  copyRawButton: {
+    marginTop: Spacing.sm,
+    padding: Spacing.xs,
+    backgroundColor: Colors.primary + '10',
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+  },
+  copyRawButtonText: {
+    ...Typography.small,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+
+  // Error action buttons
+  errorActions: {
+    gap: Spacing.xs,
   },
   diagnosticsButton: {
-    marginTop: Spacing.sm,
     padding: Spacing.sm,
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.sm,
     alignItems: 'center',
   },
   diagnosticsButtonText: {
-    ...Typography.body,
+    ...Typography.caption,
     color: Colors.surface,
     fontWeight: '600',
   },
   retryButton: {
-    marginTop: Spacing.xs,
     padding: Spacing.sm,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.surface,
     borderRadius: BorderRadius.sm,
     borderWidth: 1,
     borderColor: Colors.primary,
     alignItems: 'center',
   },
   retryButtonText: {
-    ...Typography.body,
+    ...Typography.caption,
     color: Colors.primary,
     fontWeight: '600',
   },
@@ -431,6 +539,16 @@ const styles = StyleSheet.create({
   footerText: {
     ...Typography.small,
     color: Colors.text.tertiary,
+    textAlign: 'center',
+  },
+  footerDiagLink: {
+    marginTop: Spacing.sm,
+    padding: Spacing.xs,
+  },
+  footerDiagLinkText: {
+    ...Typography.small,
+    color: Colors.primary,
+    fontWeight: '600',
     textAlign: 'center',
   },
 });
