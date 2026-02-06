@@ -71,6 +71,14 @@ export default function AdminScreen() {
           onPress: () => router.push('/equipment'),
         },
         {
+          id: 'training',
+          icon: 'school-outline',
+          title: 'Formation & Habilitations',
+          subtitle: 'Gestion des formations et qualifications',
+          onPress: () => router.push('/training'),
+          color: '#D4AF37',
+        },
+        {
           id: 'products',
           icon: 'cube-outline',
           title: 'Produits',

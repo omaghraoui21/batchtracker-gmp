@@ -18,6 +18,7 @@ import ElectronicSignatureModal, { SignatureData } from '@/components/Electronic
 import DeviationReportModal, { DeviationFormData } from '@/components/DeviationReportModal';
 import * as Haptics from 'expo-haptics';
 import { generateText } from '@fastshot/ai';
+import { checkOperatorQualification } from '@/lib/trainingUtils';
 
 type Batch = Database['public']['Tables']['batches']['Row'];
 type StepInstance = Database['public']['Tables']['step_instances']['Row'] & {
@@ -147,7 +148,7 @@ export default function BatchDetailScreen() {
     }
   };
 
-  const handleOpenSignatureModal = (step: StepInstance & { signatures: ElectronicSignature[] }) => {
+  const handleOpenSignatureModal = async (step: StepInstance & { signatures: ElectronicSignature[] }) => {
     const requiresDoubleValidation = step.step_definition?.requires_double_validation || false;
     const existingSignatures = step.signatures.length;
 
@@ -158,6 +159,28 @@ export default function BatchDetailScreen() {
 
     if (!requiresDoubleValidation && existingSignatures >= 1) {
       Alert.alert('Info', 'Cette étape a déjà été signée');
+      return;
+    }
+
+    // Check operator qualification (CRITICAL COMPLIANCE FEATURE)
+    const mockUserId = 'user-1'; // In production, use real user ID from auth context
+    const qualificationCheck = await checkOperatorQualification(mockUserId, step.step_definition);
+
+    if (!qualificationCheck.isQualified) {
+      Alert.alert(
+        'Habilitation Requise',
+        qualificationCheck.message + '\n\nVous devez posséder une habilitation valide pour signer cette étape. Contactez votre superviseur si vous êtes en formation.',
+        [
+          { text: 'Fermer', style: 'cancel' },
+          {
+            text: 'Formation',
+            onPress: () => {
+              // Navigate to training screen
+              Alert.alert('Formation', 'Accédez au module de formation pour obtenir cette habilitation.');
+            },
+          },
+        ]
+      );
       return;
     }
 

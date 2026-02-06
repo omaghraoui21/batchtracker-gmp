@@ -596,6 +596,106 @@ export type Database = {
           },
         ]
       }
+      operator_qualifications: {
+        Row: {
+          created_at: string | null
+          expiry_date: string | null
+          id: string
+          last_training_date: string | null
+          operator_email: string | null
+          operator_id: string
+          operator_name: string
+          operator_role: string
+          qualification_status: string | null
+          renewal_alert_sent: boolean | null
+          sop_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          expiry_date?: string | null
+          id?: string
+          last_training_date?: string | null
+          operator_email?: string | null
+          operator_id: string
+          operator_name: string
+          operator_role: string
+          qualification_status?: string | null
+          renewal_alert_sent?: boolean | null
+          sop_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          expiry_date?: string | null
+          id?: string
+          last_training_date?: string | null
+          operator_email?: string | null
+          operator_id?: string
+          operator_name?: string
+          operator_role?: string
+          qualification_status?: string | null
+          renewal_alert_sent?: boolean | null
+          sop_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_qualifications_sop_id_fkey"
+            columns: ["sop_id"]
+            isOneToOne: false
+            referencedRelation: "sops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_results: {
+        Row: {
+          completed_at: string | null
+          correct_answers: number
+          id: string
+          operator_id: string
+          operator_name: string
+          passed: boolean
+          quiz_questions_answered: number
+          score: number
+          sop_id: string | null
+          time_taken_seconds: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          correct_answers: number
+          id?: string
+          operator_id: string
+          operator_name: string
+          passed: boolean
+          quiz_questions_answered: number
+          score: number
+          sop_id?: string | null
+          time_taken_seconds?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          correct_answers?: number
+          id?: string
+          operator_id?: string
+          operator_name?: string
+          passed?: boolean
+          quiz_questions_answered?: number
+          score?: number
+          sop_id?: string | null
+          time_taken_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_results_sop_id_fkey"
+            columns: ["sop_id"]
+            isOneToOne: false
+            referencedRelation: "sops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       raw_materials: {
         Row: {
           created_at: string | null
@@ -691,6 +791,98 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sop_summaries: {
+        Row: {
+          content: string
+          generated_at: string | null
+          generated_by: string | null
+          id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          sop_id: string | null
+          status: string | null
+          summary_type: string | null
+          title: string
+        }
+        Insert: {
+          content: string
+          generated_at?: string | null
+          generated_by?: string | null
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sop_id?: string | null
+          status?: string | null
+          summary_type?: string | null
+          title: string
+        }
+        Update: {
+          content?: string
+          generated_at?: string | null
+          generated_by?: string | null
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sop_id?: string | null
+          status?: string | null
+          summary_type?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sop_summaries_sop_id_fkey"
+            columns: ["sop_id"]
+            isOneToOne: false
+            referencedRelation: "sops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sops: {
+        Row: {
+          category: string | null
+          code: string
+          content: string | null
+          created_at: string | null
+          created_by: string
+          description: string | null
+          id: string
+          name: string
+          status: string | null
+          updated_at: string | null
+          validity_months: number
+          version: string
+        }
+        Insert: {
+          category?: string | null
+          code: string
+          content?: string | null
+          created_at?: string | null
+          created_by: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string | null
+          updated_at?: string | null
+          validity_months?: number
+          version?: string
+        }
+        Update: {
+          category?: string | null
+          code?: string
+          content?: string | null
+          created_at?: string | null
+          created_by?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string | null
+          updated_at?: string | null
+          validity_months?: number
+          version?: string
+        }
+        Relationships: []
       }
       step_definitions: {
         Row: {
@@ -926,6 +1118,8 @@ export type Database = {
           actual_quantity?: number | null
           batch_id: string
           created_at?: string | null
+          deviation?: number | null
+          id?: string
           material_id?: string | null
           material_name: string
           notes?: string | null
@@ -935,11 +1129,14 @@ export type Database = {
           supplier_lot_number?: string | null
           theoretical_quantity: number
           unit_of_measure: string
+          yield_percentage?: number | null
         }
         Update: {
           actual_quantity?: number | null
           batch_id?: string
           created_at?: string | null
+          deviation?: number | null
+          id?: string
           material_id?: string | null
           material_name?: string
           notes?: string | null
@@ -949,6 +1146,7 @@ export type Database = {
           supplier_lot_number?: string | null
           theoretical_quantity?: number
           unit_of_measure?: string
+          yield_percentage?: number | null
         }
         Relationships: [
           {
@@ -1005,6 +1203,215 @@ export type Database = {
             columns: ["step_definition_id"]
             isOneToOne: true
             referencedRelation: "step_definitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supervised_executions: {
+        Row: {
+          authorization_reason: string
+          batch_id: string | null
+          comments: string | null
+          id: string
+          operator_id: string
+          operator_name: string
+          outcome: string | null
+          sop_id: string | null
+          step_instance_id: string | null
+          supervised_at: string | null
+          supervisor_id: string
+          supervisor_name: string
+        }
+        Insert: {
+          authorization_reason: string
+          batch_id?: string | null
+          comments?: string | null
+          id?: string
+          operator_id: string
+          operator_name: string
+          outcome?: string | null
+          sop_id?: string | null
+          step_instance_id?: string | null
+          supervised_at?: string | null
+          supervisor_id: string
+          supervisor_name: string
+        }
+        Update: {
+          authorization_reason?: string
+          batch_id?: string | null
+          comments?: string | null
+          id?: string
+          operator_id?: string
+          operator_name?: string
+          outcome?: string | null
+          sop_id?: string | null
+          step_instance_id?: string | null
+          supervised_at?: string | null
+          supervisor_id?: string
+          supervisor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supervised_executions_sop_id_fkey"
+            columns: ["sop_id"]
+            isOneToOne: false
+            referencedRelation: "sops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_alerts: {
+        Row: {
+          acknowledged: boolean | null
+          acknowledged_at: string | null
+          alert_sent_at: string | null
+          alert_type: string | null
+          days_until_expiry: number | null
+          id: string
+          operator_id: string
+          operator_name: string
+          sop_id: string | null
+        }
+        Insert: {
+          acknowledged?: boolean | null
+          acknowledged_at?: string | null
+          alert_sent_at?: string | null
+          alert_type?: string | null
+          days_until_expiry?: number | null
+          id?: string
+          operator_id: string
+          operator_name: string
+          sop_id?: string | null
+        }
+        Update: {
+          acknowledged?: boolean | null
+          acknowledged_at?: string | null
+          alert_sent_at?: string | null
+          alert_type?: string | null
+          days_until_expiry?: number | null
+          id?: string
+          operator_id?: string
+          operator_name?: string
+          sop_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_alerts_sop_id_fkey"
+            columns: ["sop_id"]
+            isOneToOne: false
+            referencedRelation: "sops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_quizzes: {
+        Row: {
+          correct_answer: string
+          created_at: string | null
+          created_by: string | null
+          difficulty: string | null
+          explanation: string | null
+          id: string
+          question: string
+          sop_id: string | null
+          wrong_answer_1: string | null
+          wrong_answer_2: string | null
+          wrong_answer_3: string | null
+        }
+        Insert: {
+          correct_answer: string
+          created_at?: string | null
+          created_by?: string | null
+          difficulty?: string | null
+          explanation?: string | null
+          id?: string
+          question: string
+          sop_id?: string | null
+          wrong_answer_1?: string | null
+          wrong_answer_2?: string | null
+          wrong_answer_3?: string | null
+        }
+        Update: {
+          correct_answer?: string
+          created_at?: string | null
+          created_by?: string | null
+          difficulty?: string | null
+          explanation?: string | null
+          id?: string
+          question?: string
+          sop_id?: string | null
+          wrong_answer_1?: string | null
+          wrong_answer_2?: string | null
+          wrong_answer_3?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_quizzes_sop_id_fkey"
+            columns: ["sop_id"]
+            isOneToOne: false
+            referencedRelation: "sops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_records: {
+        Row: {
+          certificate_url: string | null
+          created_at: string | null
+          expiry_date: string
+          id: string
+          notes: string | null
+          operator_id: string
+          operator_name: string
+          quiz_passed: boolean | null
+          quiz_score: number | null
+          sop_id: string | null
+          status: string | null
+          trainer_name: string
+          trainer_signature: string | null
+          training_date: string
+          training_method: string | null
+        }
+        Insert: {
+          certificate_url?: string | null
+          created_at?: string | null
+          expiry_date: string
+          id?: string
+          notes?: string | null
+          operator_id: string
+          operator_name: string
+          quiz_passed?: boolean | null
+          quiz_score?: number | null
+          sop_id?: string | null
+          status?: string | null
+          trainer_name: string
+          trainer_signature?: string | null
+          training_date?: string
+          training_method?: string | null
+        }
+        Update: {
+          certificate_url?: string | null
+          created_at?: string | null
+          expiry_date?: string
+          id?: string
+          notes?: string | null
+          operator_id?: string
+          operator_name?: string
+          quiz_passed?: boolean | null
+          quiz_score?: number | null
+          sop_id?: string | null
+          status?: string | null
+          trainer_name?: string
+          trainer_signature?: string | null
+          training_date?: string
+          training_method?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_records_sop_id_fkey"
+            columns: ["sop_id"]
+            isOneToOne: false
+            referencedRelation: "sops"
             referencedColumns: ["id"]
           },
         ]

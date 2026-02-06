@@ -15,6 +15,10 @@ export const Colors = {
   success: '#00A86B',
   border: '#E1E8ED',
   inactive: '#CBD5E0',
+  // Training & Certifications Colors
+  gold: '#D4AF37', // Or pour certifications premium
+  bronze: '#CD7F32', // Bronze pour certifications
+  emerald: '#50C878', // Vert émeraude pour statut actif/qualifié
 };
 
 export const Spacing = {
