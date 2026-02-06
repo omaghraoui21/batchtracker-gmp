@@ -788,6 +788,19 @@ Réponds au format JSON:
             <Text style={styles.deviationReportButtonText}>Signaler une Déviation</Text>
           </TouchableOpacity>
         )}
+
+        {/* eBMR PDF Generation Button */}
+        {batch.status === 'completed' && (
+          <TouchableOpacity
+            style={styles.pdfGenerateButton}
+            onPress={() => router.push(`/ebmr/${batch.id}`)}
+          >
+            <Ionicons name="document-text" size={20} color={Colors.surface} />
+            <Text style={styles.pdfGenerateButtonText}>
+              Générer le Dossier de Lot (PDF)
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Electronic Signature Modal */}
@@ -1201,5 +1214,20 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.error,
     fontWeight: '600',
+  },
+  pdfGenerateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    padding: Spacing.md,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.xl,
+  },
+  pdfGenerateButtonText: {
+    ...Typography.body,
+    color: Colors.surface,
+    fontWeight: '700',
   },
 });

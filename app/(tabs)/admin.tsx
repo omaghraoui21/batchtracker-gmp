@@ -64,6 +64,13 @@ export default function AdminScreen() {
           onPress: () => router.push('/workflow-config'),
         },
         {
+          id: 'equipment',
+          icon: 'construct-outline',
+          title: 'Équipements',
+          subtitle: 'Registre des équipements et maintenance',
+          onPress: () => router.push('/equipment'),
+        },
+        {
           id: 'products',
           icon: 'cube-outline',
           title: 'Produits',

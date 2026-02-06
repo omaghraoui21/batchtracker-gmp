@@ -14,6 +14,162 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_quality_reviews: {
+        Row: {
+          analysis_result: Json
+          anomalies_detected: Json | null
+          batch_id: string
+          confidence_score: number | null
+          created_at: string | null
+          id: string
+          recommendations: string | null
+          review_type: string
+          reviewed_at: string | null
+          summary: string | null
+        }
+        Insert: {
+          analysis_result: Json
+          anomalies_detected?: Json | null
+          batch_id: string
+          confidence_score?: number | null
+          created_at?: string | null
+          id?: string
+          recommendations?: string | null
+          review_type: string
+          reviewed_at?: string | null
+          summary?: string | null
+        }
+        Update: {
+          analysis_result?: Json
+          anomalies_detected?: Json | null
+          batch_id?: string
+          confidence_score?: number | null
+          created_at?: string | null
+          id?: string
+          recommendations?: string | null
+          review_type?: string
+          reviewed_at?: string | null
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_quality_reviews_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_trail: {
+        Row: {
+          action_type: string
+          batch_id: string | null
+          description: string | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          ip_address: string | null
+          new_value: Json | null
+          old_value: Json | null
+          timestamp: string | null
+          user_agent: string | null
+          user_id: string | null
+          user_name: string
+          user_role: string | null
+        }
+        Insert: {
+          action_type: string
+          batch_id?: string | null
+          description?: string | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          ip_address?: string | null
+          new_value?: Json | null
+          old_value?: Json | null
+          timestamp?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+          user_name: string
+          user_role?: string | null
+        }
+        Update: {
+          action_type?: string
+          batch_id?: string | null
+          description?: string | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          ip_address?: string | null
+          new_value?: Json | null
+          old_value?: Json | null
+          timestamp?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+          user_name?: string
+          user_role?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_trail_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batch_locks: {
+        Row: {
+          batch_id: string
+          created_at: string | null
+          id: string
+          is_locked: boolean | null
+          lock_reason: string | null
+          locked_at: string | null
+          locked_by: string | null
+          pdf_generated_at: string | null
+          pdf_url: string | null
+          release_signature_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string | null
+          id?: string
+          is_locked?: boolean | null
+          lock_reason?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          pdf_generated_at?: string | null
+          pdf_url?: string | null
+          release_signature_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string | null
+          id?: string
+          is_locked?: boolean | null
+          lock_reason?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          pdf_generated_at?: string | null
+          pdf_url?: string | null
+          release_signature_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_locks_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: true
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       batches: {
         Row: {
           batch_number: string
@@ -211,6 +367,53 @@ export type Database = {
           },
         ]
       }
+      ebmr_pdf_history: {
+        Row: {
+          batch_id: string
+          checksum: string | null
+          created_at: string | null
+          file_size_bytes: number | null
+          generated_at: string | null
+          generated_by: string
+          id: string
+          notes: string | null
+          pdf_url: string | null
+          version: number | null
+        }
+        Insert: {
+          batch_id: string
+          checksum?: string | null
+          created_at?: string | null
+          file_size_bytes?: number | null
+          generated_at?: string | null
+          generated_by: string
+          id?: string
+          notes?: string | null
+          pdf_url?: string | null
+          version?: number | null
+        }
+        Update: {
+          batch_id?: string
+          checksum?: string | null
+          created_at?: string | null
+          file_size_bytes?: number | null
+          generated_at?: string | null
+          generated_by?: string
+          id?: string
+          notes?: string | null
+          pdf_url?: string | null
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ebmr_pdf_history_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       electronic_signatures: {
         Row: {
           comments: string | null
@@ -257,6 +460,189 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      equipment: {
+        Row: {
+          calibration_expiry_date: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          location: string | null
+          name: string
+          status: string
+          unique_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          calibration_expiry_date?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          location?: string | null
+          name: string
+          status?: string
+          unique_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          calibration_expiry_date?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          location?: string | null
+          name?: string
+          status?: string
+          unique_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      equipment_logbook: {
+        Row: {
+          batch_id: string
+          created_at: string | null
+          equipment_id: string
+          id: string
+          notes: string | null
+          step_instance_id: string | null
+          used_at: string | null
+          used_by: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string | null
+          equipment_id: string
+          id?: string
+          notes?: string | null
+          step_instance_id?: string | null
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string | null
+          equipment_id?: string
+          id?: string
+          notes?: string | null
+          step_instance_id?: string | null
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_logbook_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_logbook_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_logbook_step_instance_id_fkey"
+            columns: ["step_instance_id"]
+            isOneToOne: false
+            referencedRelation: "step_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      equipment_maintenance: {
+        Row: {
+          created_at: string | null
+          equipment_id: string
+          id: string
+          maintenance_type: string
+          next_maintenance_date: string | null
+          notes: string | null
+          performed_at: string | null
+          performed_by: string
+        }
+        Insert: {
+          created_at?: string | null
+          equipment_id: string
+          id?: string
+          maintenance_type: string
+          next_maintenance_date?: string | null
+          notes?: string | null
+          performed_at?: string | null
+          performed_by: string
+        }
+        Update: {
+          created_at?: string | null
+          equipment_id?: string
+          id?: string
+          maintenance_type?: string
+          next_maintenance_date?: string | null
+          notes?: string | null
+          performed_at?: string | null
+          performed_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_maintenance_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      raw_materials: {
+        Row: {
+          created_at: string | null
+          expiry_date: string | null
+          id: string
+          internal_lot_number: string | null
+          material_name: string
+          quantity_received: number | null
+          received_date: string | null
+          status: string | null
+          storage_location: string | null
+          supplier: string | null
+          supplier_lot_number: string | null
+          unit_of_measure: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          expiry_date?: string | null
+          id?: string
+          internal_lot_number?: string | null
+          material_name: string
+          quantity_received?: number | null
+          received_date?: string | null
+          status?: string | null
+          storage_location?: string | null
+          supplier?: string | null
+          supplier_lot_number?: string | null
+          unit_of_measure?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          expiry_date?: string | null
+          id?: string
+          internal_lot_number?: string | null
+          material_name?: string
+          quantity_received?: number | null
+          received_date?: string | null
+          status?: string | null
+          storage_location?: string | null
+          supplier?: string | null
+          supplier_lot_number?: string | null
+          unit_of_measure?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       scan_history: {
         Row: {
@@ -352,6 +738,64 @@ export type Database = {
             columns: ["workflow_template_id"]
             isOneToOne: false
             referencedRelation: "workflow_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      step_equipment: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          batch_id: string
+          created_at: string | null
+          equipment_id: string
+          id: string
+          step_instance_id: string
+          validation_notes: string | null
+          validation_status: string | null
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          batch_id: string
+          created_at?: string | null
+          equipment_id: string
+          id?: string
+          step_instance_id: string
+          validation_notes?: string | null
+          validation_status?: string | null
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          batch_id?: string
+          created_at?: string | null
+          equipment_id?: string
+          id?: string
+          step_instance_id?: string
+          validation_notes?: string | null
+          validation_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "step_equipment_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "step_equipment_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "step_equipment_step_instance_id_fkey"
+            columns: ["step_instance_id"]
+            isOneToOne: false
+            referencedRelation: "step_instances"
             referencedColumns: ["id"]
           },
         ]
@@ -456,6 +900,76 @@ export type Database = {
             columns: ["step_definition_id"]
             isOneToOne: false
             referencedRelation: "step_definitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      step_materials: {
+        Row: {
+          actual_quantity: number | null
+          batch_id: string
+          created_at: string | null
+          deviation: number | null
+          id: string
+          material_id: string | null
+          material_name: string
+          notes: string | null
+          recorded_at: string | null
+          recorded_by: string | null
+          step_instance_id: string
+          supplier_lot_number: string | null
+          theoretical_quantity: number
+          unit_of_measure: string
+          yield_percentage: number | null
+        }
+        Insert: {
+          actual_quantity?: number | null
+          batch_id: string
+          created_at?: string | null
+          material_id?: string | null
+          material_name: string
+          notes?: string | null
+          recorded_at?: string | null
+          recorded_by?: string | null
+          step_instance_id: string
+          supplier_lot_number?: string | null
+          theoretical_quantity: number
+          unit_of_measure: string
+        }
+        Update: {
+          actual_quantity?: number | null
+          batch_id?: string
+          created_at?: string | null
+          material_id?: string | null
+          material_name?: string
+          notes?: string | null
+          recorded_at?: string | null
+          recorded_by?: string | null
+          step_instance_id?: string
+          supplier_lot_number?: string | null
+          theoretical_quantity?: number
+          unit_of_measure?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "step_materials_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "step_materials_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "step_materials_step_instance_id_fkey"
+            columns: ["step_instance_id"]
+            isOneToOne: false
+            referencedRelation: "step_instances"
             referencedColumns: ["id"]
           },
         ]
