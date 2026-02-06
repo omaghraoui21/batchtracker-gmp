@@ -35,10 +35,10 @@ export async function loadRolePermissions(role: UserRole): Promise<RolePermissio
     const permissions: RolePermissions = {};
     data?.forEach((perm) => {
       permissions[perm.module] = {
-        can_read: perm.can_read,
-        can_write: perm.can_write,
-        can_delete: perm.can_delete,
-        can_approve: perm.can_approve,
+        can_read: perm.can_read ?? false,
+        can_write: perm.can_write ?? false,
+        can_delete: perm.can_delete ?? false,
+        can_approve: perm.can_approve ?? false,
       };
     });
 
