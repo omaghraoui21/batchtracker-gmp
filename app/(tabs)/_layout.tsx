@@ -2,9 +2,14 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '@/context/AuthContext';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+
+  // Check if the user has admin role
+  const isAdmin = user?.role === 'ADMIN';
 
   return (
     <Tabs
@@ -77,6 +82,8 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="settings-outline" size={size} color={color} />
           ),
+          // Hide admin tab for non-admin users
+          href: isAdmin ? undefined : null,
         }}
       />
     </Tabs>

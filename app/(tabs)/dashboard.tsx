@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/Card';
+import { DebugAuthInfo } from '@/components/DebugAuthInfo';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
@@ -158,6 +159,9 @@ export default function DashboardScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
       }
     >
+      {/* Debug Information - Only visible in development */}
+      <DebugAuthInfo visible={__DEV__} />
+
       {/* En-tête utilisateur */}
       <View style={styles.header}>
         <View>

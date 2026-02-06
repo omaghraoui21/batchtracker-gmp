@@ -47,15 +47,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUserProfile = async (userId: string) => {
     try {
+      console.log('[AuthContext] Loading profile for user ID:', userId);
+
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[AuthContext] Error loading profile:', error);
+        throw error;
+      }
 
       if (profile) {
+        console.log('[AuthContext] Profile loaded successfully:', {
+          email: profile.email,
+          name: profile.name,
+          role: profile.role,
+        });
+
         const user: User = {
           id: profile.id,
           email: profile.email,
@@ -70,10 +81,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .update({ last_login_at: new Date().toISOString() })
           .eq('id', userId);
 
+        console.log('[AuthContext] User authenticated:', user.email, 'Role:', user.role);
         setAuthState({ user, isAuthenticated: true, isLoading: false });
+      } else {
+        console.error('[AuthContext] No profile found for user ID:', userId);
+        setAuthState({ user: null, isAuthenticated: false, isLoading: false });
       }
     } catch (error) {
-      console.error('Erreur lors du chargement du profil:', error);
+      console.error('[AuthContext] Fatal error loading profile:', error);
       setAuthState({ user: null, isAuthenticated: false, isLoading: false });
     }
   };
@@ -83,17 +98,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Email et mot de passe requis');
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    console.log('[AuthContext] Attempting login for:', email);
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (data.user) {
-      await loadUserProfile(data.user.id);
+      if (error) {
+        console.error('[AuthContext] Login failed:', error.message);
+        throw new Error(error.message);
+      }
+
+      if (data.user) {
+        console.log('[AuthContext] Login successful, loading profile...');
+        await loadUserProfile(data.user.id);
+      } else {
+        console.error('[AuthContext] No user data returned from login');
+        throw new Error('Connexion échouée - Aucune donnée utilisateur');
+      }
+    } catch (error) {
+      console.error('[AuthContext] Login error:', error);
+      throw error;
     }
   };
 

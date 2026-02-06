@@ -12,6 +12,8 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { DebugAuthInfo } from '@/components/DebugAuthInfo';
+import { SupabaseConnectionTest } from '@/components/SupabaseConnectionTest';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 
 interface MenuItem {
@@ -26,6 +28,45 @@ interface MenuItem {
 export default function AdminScreen() {
   const { user, logout } = useAuth();
   const router = useRouter();
+
+  // Access control: redirect non-admin users
+  React.useEffect(() => {
+    if (user && user.role !== 'ADMIN') {
+      Alert.alert(
+        'Accès refusé',
+        'Vous devez avoir le rôle ADMIN pour accéder à cette section.',
+        [
+          {
+            text: 'Retour',
+            onPress: () => router.replace('/(tabs)/dashboard'),
+          },
+        ]
+      );
+    }
+  }, [user, router]);
+
+  // Show access denied for non-admin users
+  if (!user || user.role !== 'ADMIN') {
+    return (
+      <View style={styles.container}>
+        <View style={styles.accessDeniedContainer}>
+          <Ionicons name="shield-outline" size={80} color={Colors.error} />
+          <Text style={styles.accessDeniedTitle}>Accès refusé</Text>
+          <Text style={styles.accessDeniedText}>
+            Vous devez avoir le rôle ADMIN pour accéder à cette section.
+          </Text>
+          <Text style={styles.accessDeniedInfo}>
+            Rôle actuel: {user?.role || 'Non défini'}
+          </Text>
+          <Button
+            title="Retour au Tableau de Bord"
+            onPress={() => router.replace('/(tabs)/dashboard')}
+            style={styles.backButton}
+          />
+        </View>
+      </View>
+    );
+  }
 
   const handleLogout = () => {
     Alert.alert(
@@ -144,6 +185,12 @@ export default function AdminScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* Debug Information - Only visible in development */}
+      <DebugAuthInfo visible={__DEV__} />
+
+      {/* Connection Test - Only visible in development */}
+      {__DEV__ && <SupabaseConnectionTest />}
+
       {/* Profil utilisateur */}
       <Card style={styles.profileCard}>
         <View style={styles.profileHeader}>
@@ -255,6 +302,34 @@ const styles = StyleSheet.create({
   content: {
     padding: Spacing.lg,
     paddingBottom: Spacing.xxl,
+  },
+  accessDeniedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  accessDeniedTitle: {
+    ...Typography.h1,
+    color: Colors.error,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  accessDeniedText: {
+    ...Typography.body,
+    textAlign: 'center',
+    color: Colors.text.secondary,
+    marginBottom: Spacing.md,
+  },
+  accessDeniedInfo: {
+    ...Typography.caption,
+    textAlign: 'center',
+    color: Colors.text.tertiary,
+    marginBottom: Spacing.xl,
+    fontWeight: '600',
+  },
+  backButton: {
+    minWidth: 200,
   },
   profileCard: {
     marginBottom: Spacing.xl,
