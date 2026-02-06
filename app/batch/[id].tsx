@@ -14,15 +14,18 @@ import { Card } from '@/components/Card';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
+import ElectronicSignatureModal, { SignatureData } from '@/components/ElectronicSignatureModal';
+import * as Haptics from 'expo-haptics';
 
 type Batch = Database['public']['Tables']['batches']['Row'];
 type StepInstance = Database['public']['Tables']['step_instances']['Row'] & {
-  step_definition: Database['public']['Tables']['step_definitions']['Row'];
+  step_definition: Database['public']['Tables']['step_definitions']['Row'] | null;
 };
 type Deviation = Database['public']['Tables']['deviations']['Row'];
+type ElectronicSignature = Database['public']['Tables']['electronic_signatures']['Row'];
 
 interface BatchWithDetails extends Batch {
-  steps: StepInstance[];
+  steps: (StepInstance & { signatures: ElectronicSignature[] })[];
   deviations: Deviation[];
 }
 
@@ -32,6 +35,9 @@ export default function BatchDetailScreen() {
   const [batch, setBatch] = useState<BatchWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [signatureModalVisible, setSignatureModalVisible] = useState(false);
+  const [currentSigningStep, setCurrentSigningStep] = useState<StepInstance | null>(null);
+  const [signatureOrder, setSignatureOrder] = useState<1 | 2>(1);
 
   useEffect(() => {
     fetchBatchDetails();
@@ -42,7 +48,7 @@ export default function BatchDetailScreen() {
     try {
       setLoading(true);
 
-      // Fetch batch with workflow template
+      // Fetch batch
       const { data: batchData, error: batchError } = await supabase
         .from('batches')
         .select('*')
@@ -51,7 +57,7 @@ export default function BatchDetailScreen() {
 
       if (batchError) throw batchError;
 
-      // Fetch step instances with their definitions
+      // Fetch step instances with definitions and signatures
       const { data: stepsData, error: stepsError } = await supabase
         .from('step_instances')
         .select(`
@@ -62,6 +68,20 @@ export default function BatchDetailScreen() {
         .order('created_at', { ascending: true });
 
       if (stepsError) throw stepsError;
+
+      // Fetch signatures for all steps
+      const stepIds = stepsData?.map((s) => s.id) || [];
+      const { data: signaturesData } = await supabase
+        .from('electronic_signatures')
+        .select('*')
+        .in('step_instance_id', stepIds)
+        .order('signature_order', { ascending: true });
+
+      // Map signatures to steps
+      const stepsWithSignatures = (stepsData as StepInstance[] || []).map((step) => ({
+        ...step,
+        signatures: signaturesData?.filter((sig) => sig.step_instance_id === step.id) || [],
+      }));
 
       // Fetch deviations
       const { data: deviationsData, error: deviationsError } = await supabase
@@ -74,7 +94,7 @@ export default function BatchDetailScreen() {
 
       setBatch({
         ...batchData,
-        steps: stepsData as StepInstance[],
+        steps: stepsWithSignatures,
         deviations: deviationsData || [],
       });
     } catch (error) {
@@ -85,112 +105,164 @@ export default function BatchDetailScreen() {
     }
   };
 
-  const getCurrentStepIndex = () => {
-    if (!batch) return -1;
-    return batch.steps.findIndex((step) => step.id === batch.current_step_id);
+  const handleCheckIn = async (step: StepInstance) => {
+    try {
+      setActionLoading(true);
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      // Mock user data - in production, get from auth context
+      const mockUserId = 'user-123';
+      const mockUserName = 'Jean Dupont';
+
+      // Update step assignment
+      await supabase
+        .from('step_instances')
+        .update({
+          assigned_to: mockUserName,
+          assigned_at: new Date().toISOString(),
+          status: 'in_progress',
+          started_at: step.started_at || new Date().toISOString(),
+        })
+        .eq('id', step.id);
+
+      // Insert history entry
+      await supabase.from('step_history').insert({
+        step_instance_id: step.id,
+        from_status: step.status,
+        to_status: 'in_progress',
+        changed_by: mockUserId,
+        notes: `Check-in par ${mockUserName}`,
+      });
+
+      Alert.alert('Check-in Réussi', `Vous êtes maintenant assigné à cette étape`);
+      fetchBatchDetails();
+    } catch (error) {
+      console.error('Error checking in:', error);
+      Alert.alert('Erreur', 'Impossible de s\'assigner à cette étape');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const canValidateCurrentStep = () => {
-    if (!batch) return false;
+  const handleOpenSignatureModal = (step: StepInstance & { signatures: ElectronicSignature[] }) => {
+    const requiresDoubleValidation = step.step_definition?.requires_double_validation || false;
+    const existingSignatures = step.signatures.length;
 
-    const currentStepIndex = getCurrentStepIndex();
-    if (currentStepIndex === -1) return false;
-
-    const currentStep = batch.steps[currentStepIndex];
-    if (currentStep.status !== 'in_progress') return false;
-
-    // Check for critical deviations
-    const hasCriticalDeviation = batch.deviations.some(
-      (d) => d.severity === 'critical' && d.status === 'open'
-    );
-
-    return !hasCriticalDeviation;
-  };
-
-  const handleMarkAsReady = async () => {
-    if (!batch) return;
-
-    if (!canValidateCurrentStep()) {
-      Alert.alert(
-        'Validation impossible',
-        'Vous ne pouvez pas valider cette étape car il y a des déviations critiques ouvertes.'
-      );
+    if (requiresDoubleValidation && existingSignatures >= 2) {
+      Alert.alert('Info', 'Cette étape a déjà été validée par deux signatures');
       return;
     }
 
-    Alert.alert(
-      'Confirmer la validation',
-      'Êtes-vous sûr de vouloir marquer cette étape comme prête ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Confirmer',
-          onPress: async () => {
-            try {
-              setActionLoading(true);
-              const currentStepIndex = getCurrentStepIndex();
-              const currentStep = batch.steps[currentStepIndex];
+    if (!requiresDoubleValidation && existingSignatures >= 1) {
+      Alert.alert('Info', 'Cette étape a déjà été signée');
+      return;
+    }
 
-              // Update current step as completed
-              await supabase
-                .from('step_instances')
-                .update({
-                  status: 'completed',
-                  completed_at: new Date().toISOString(),
-                  decision: 'approved',
-                })
-                .eq('id', currentStep.id);
+    setCurrentSigningStep(step);
+    setSignatureOrder(existingSignatures === 0 ? 1 : 2);
+    setSignatureModalVisible(true);
+  };
 
-              // Insert history entry
-              await supabase.from('step_history').insert({
-                step_instance_id: currentStep.id,
-                from_status: 'in_progress',
-                to_status: 'completed',
-              });
+  const handleSign = async (signatureData: SignatureData) => {
+    if (!currentSigningStep || !batch) return;
 
-              // Move to next step if available
-              if (currentStepIndex < batch.steps.length - 1) {
-                const nextStep = batch.steps[currentStepIndex + 1];
+    try {
+      setActionLoading(true);
 
-                await supabase
-                  .from('step_instances')
-                  .update({
-                    status: 'in_progress',
-                    started_at: new Date().toISOString(),
-                  })
-                  .eq('id', nextStep.id);
+      // Mock user ID - in production, get from auth context
+      const mockUserId = 'user-123';
 
-                await supabase
-                  .from('batches')
-                  .update({ current_step_id: nextStep.id })
-                  .eq('id', batch.id);
-              } else {
-                // Mark batch as completed
-                await supabase
-                  .from('batches')
-                  .update({
-                    status: 'completed',
-                    completed_at: new Date().toISOString(),
-                  })
-                  .eq('id', batch.id);
-              }
+      // Create electronic signature
+      const { error: signatureError } = await supabase
+        .from('electronic_signatures')
+        .insert({
+          step_instance_id: currentSigningStep.id,
+          signer_user_id: mockUserId,
+          signer_name: signatureData.signerName,
+          signer_role: signatureData.signerRole,
+          signature_type: signatureData.signatureType,
+          signature_order: signatureData.signatureOrder,
+          comments: signatureData.comments,
+        });
 
-              Alert.alert('Succès', 'Étape validée avec succès');
-              fetchBatchDetails();
-            } catch (error) {
-              console.error('Error validating step:', error);
-              Alert.alert('Erreur', 'Impossible de valider l\'étape');
-            } finally {
-              setActionLoading(false);
-            }
-          },
-        },
-      ]
-    );
+      if (signatureError) throw signatureError;
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Check if step can be completed
+      const requiresDoubleValidation =
+        currentSigningStep.step_definition?.requires_double_validation || false;
+      const canComplete =
+        !requiresDoubleValidation ||
+        (requiresDoubleValidation && signatureData.signatureOrder === 2);
+
+      if (canComplete) {
+        // Complete current step
+        await supabase
+          .from('step_instances')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            decision: 'approved',
+          })
+          .eq('id', currentSigningStep.id);
+
+        // Insert history entry
+        await supabase.from('step_history').insert({
+          step_instance_id: currentSigningStep.id,
+          from_status: 'in_progress',
+          to_status: 'completed',
+          notes: `Validé avec signature électronique par ${signatureData.signerName}`,
+        });
+
+        // Move to next step if available
+        const currentIndex = batch.steps.findIndex((s) => s.id === currentSigningStep.id);
+        if (currentIndex < batch.steps.length - 1) {
+          const nextStep = batch.steps[currentIndex + 1];
+
+          await supabase
+            .from('step_instances')
+            .update({
+              status: 'in_progress',
+              started_at: new Date().toISOString(),
+            })
+            .eq('id', nextStep.id);
+
+          await supabase
+            .from('batches')
+            .update({ current_step_id: nextStep.id })
+            .eq('id', batch.id);
+        } else {
+          // Mark batch as completed
+          await supabase
+            .from('batches')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', batch.id);
+        }
+
+        Alert.alert('Succès', 'Étape validée et signature enregistrée');
+      } else {
+        Alert.alert(
+          'Première Signature',
+          'Première signature enregistrée. Une deuxième signature est requise pour valider cette étape.'
+        );
+      }
+
+      fetchBatchDetails();
+    } catch (error) {
+      console.error('Error signing:', error);
+      Alert.alert('Erreur', 'Impossible d\'enregistrer la signature');
+    } finally {
+      setActionLoading(false);
+      setSignatureModalVisible(false);
+      setCurrentSigningStep(null);
+    }
   };
 
   const handleReportDeviation = () => {
-    // Navigate to deviation reporting screen (to be implemented)
     Alert.alert('Signaler une Déviation', 'Fonctionnalité à venir');
   };
 
@@ -270,8 +342,6 @@ export default function BatchDetailScreen() {
     );
   }
 
-  const currentStepIndex = getCurrentStepIndex();
-
   return (
     <>
       <Stack.Screen
@@ -288,7 +358,12 @@ export default function BatchDetailScreen() {
               <Text style={styles.batchNumber}>Lot #{batch.batch_number}</Text>
               <Text style={styles.productName}>{batch.product_name}</Text>
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(batch.status) + '20' }]}>
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: getStatusColor(batch.status) + '20' },
+              ]}
+            >
               <Text style={[styles.statusText, { color: getStatusColor(batch.status) }]}>
                 {batch.status === 'active' ? 'En production' : 'Terminé'}
               </Text>
@@ -303,18 +378,18 @@ export default function BatchDetailScreen() {
         </Card>
 
         {/* Critical Deviations Warning */}
-        {batch.deviations.filter((d) => d.severity === 'critical' && d.status === 'open').length > 0 && (
+        {batch.deviations.filter((d) => d.severity === 'critical' && d.status === 'open')
+          .length > 0 && (
           <Card style={styles.warningCard}>
             <View style={styles.warningHeader}>
               <Ionicons name="warning" size={24} color={Colors.error} />
               <Text style={styles.warningTitle}>Déviations Critiques</Text>
             </View>
             <Text style={styles.warningText}>
-              {batch.deviations.filter((d) => d.severity === 'critical' && d.status === 'open').length} déviation(s) critique(s) ouverte(s)
+              {batch.deviations.filter((d) => d.severity === 'critical' && d.status === 'open').length}{' '}
+              déviation(s) critique(s) ouverte(s)
             </Text>
-            <Text style={styles.warningSubtext}>
-              La validation de cette étape est bloquée
-            </Text>
+            <Text style={styles.warningSubtext}>La validation est bloquée</Text>
           </Card>
         )}
 
@@ -326,6 +401,14 @@ export default function BatchDetailScreen() {
             {batch.steps.map((step, index) => {
               const slaStatus = calculateSLAStatus(step);
               const isOverdue = slaStatus === 'overdue';
+              const requiresDoubleValidation =
+                step.step_definition?.requires_double_validation || false;
+              const hasFirstSignature = step.signatures.length >= 1;
+              const hasSecondSignature = step.signatures.length >= 2;
+              const canCheckIn = step.status === 'pending' && !step.assigned_to;
+              const canSign =
+                step.status === 'in_progress' &&
+                (!requiresDoubleValidation || step.signatures.length < 2);
 
               return (
                 <View key={step.id}>
@@ -354,9 +437,7 @@ export default function BatchDetailScreen() {
                             styles.timelineLine,
                             {
                               backgroundColor:
-                                step.status === 'completed'
-                                  ? Colors.success
-                                  : Colors.border,
+                                step.status === 'completed' ? Colors.success : Colors.border,
                             },
                           ]}
                         />
@@ -366,9 +447,17 @@ export default function BatchDetailScreen() {
                     {/* Step content */}
                     <View style={styles.timelineContent}>
                       <View style={styles.stepHeader}>
-                        <Text style={styles.stepName}>
-                          {step.step_definition?.name || 'Étape'}
-                        </Text>
+                        <View style={styles.stepHeaderLeft}>
+                          <Text style={styles.stepName}>
+                            {step.step_definition?.name || 'Étape'}
+                          </Text>
+                          {requiresDoubleValidation && (
+                            <View style={styles.doubleValidationBadge}>
+                              <Ionicons name="people" size={12} color={Colors.primary} />
+                              <Text style={styles.doubleValidationText}>Double</Text>
+                            </View>
+                          )}
+                        </View>
                         {isOverdue && (
                           <View style={styles.slaWarning}>
                             <Ionicons name="time-outline" size={14} color={Colors.error} />
@@ -379,15 +468,32 @@ export default function BatchDetailScreen() {
 
                       <View style={styles.stepDetails}>
                         <View style={styles.stepDetailRow}>
-                          <Ionicons name="person-outline" size={14} color={Colors.text.secondary} />
+                          <Ionicons
+                            name="person-outline"
+                            size={14}
+                            color={Colors.text.secondary}
+                          />
                           <Text style={styles.stepDetailText}>
                             {step.step_definition?.required_role || 'Non assigné'}
                           </Text>
                         </View>
 
+                        {step.assigned_to && (
+                          <View style={styles.assignedRow}>
+                            <Ionicons name="checkmark-circle" size={14} color={Colors.primary} />
+                            <Text style={[styles.stepDetailText, { color: Colors.primary }]}>
+                              En cours par: {step.assigned_to}
+                            </Text>
+                          </View>
+                        )}
+
                         {step.started_at && (
                           <View style={styles.stepDetailRow}>
-                            <Ionicons name="time-outline" size={14} color={Colors.text.secondary} />
+                            <Ionicons
+                              name="time-outline"
+                              size={14}
+                              color={Colors.text.secondary}
+                            />
                             <Text style={styles.stepDetailText}>
                               Démarrée: {formatDate(step.started_at)}
                             </Text>
@@ -396,37 +502,82 @@ export default function BatchDetailScreen() {
 
                         {step.completed_at && (
                           <View style={styles.stepDetailRow}>
-                            <Ionicons name="checkmark-circle-outline" size={14} color={Colors.success} />
+                            <Ionicons
+                              name="checkmark-circle-outline"
+                              size={14}
+                              color={Colors.success}
+                            />
                             <Text style={styles.stepDetailText}>
                               Terminée: {formatDate(step.completed_at)}
                             </Text>
                           </View>
                         )}
-
-                        {step.sla_deadline && (
-                          <View style={styles.stepDetailRow}>
-                            <Ionicons
-                              name="alarm-outline"
-                              size={14}
-                              color={isOverdue ? Colors.error : Colors.text.secondary}
-                            />
-                            <Text
-                              style={[
-                                styles.stepDetailText,
-                                isOverdue && { color: Colors.error },
-                              ]}
-                            >
-                              SLA: {formatDate(step.sla_deadline)}
-                            </Text>
-                          </View>
-                        )}
                       </View>
 
-                      <View style={[styles.stepStatusBadge, { backgroundColor: getStatusColor(step.status) + '15' }]}>
-                        <Text style={[styles.stepStatusText, { color: getStatusColor(step.status) }]}>
+                      {/* Signatures */}
+                      {step.signatures.length > 0 && (
+                        <View style={styles.signaturesContainer}>
+                          <Text style={styles.signaturesTitle}>Signatures:</Text>
+                          {step.signatures.map((sig) => (
+                            <View key={sig.id} style={styles.signatureRow}>
+                              <Ionicons name="create" size={14} color={Colors.success} />
+                              <Text style={styles.signatureText}>
+                                {sig.signature_order === 1 ? '1ère' : '2ème'}: {sig.signer_name} (
+                                {sig.signer_role}) -{' '}
+                                {new Date(sig.signed_at).toLocaleString('fr-FR')}
+                              </Text>
+                            </View>
+                          ))}
+                          {requiresDoubleValidation && hasFirstSignature && !hasSecondSignature && (
+                            <Text style={styles.pendingSignatureText}>
+                              ⏳ En attente de la 2ème signature
+                            </Text>
+                          )}
+                        </View>
+                      )}
+
+                      <View
+                        style={[
+                          styles.stepStatusBadge,
+                          { backgroundColor: getStatusColor(step.status) + '15' },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.stepStatusText, { color: getStatusColor(step.status) }]}
+                        >
                           {getStatusLabel(step.status)}
                         </Text>
                       </View>
+
+                      {/* Step Actions */}
+                      {(canCheckIn || canSign) && (
+                        <View style={styles.stepActions}>
+                          {canCheckIn && (
+                            <TouchableOpacity
+                              style={styles.checkInButton}
+                              onPress={() => handleCheckIn(step)}
+                              disabled={actionLoading}
+                            >
+                              <Ionicons name="log-in" size={16} color={Colors.primary} />
+                              <Text style={styles.checkInButtonText}>Check-in</Text>
+                            </TouchableOpacity>
+                          )}
+                          {canSign && (
+                            <TouchableOpacity
+                              style={styles.signButton}
+                              onPress={() => handleOpenSignatureModal(step)}
+                              disabled={actionLoading}
+                            >
+                              <Ionicons name="create" size={16} color={Colors.surface} />
+                              <Text style={styles.signButtonText}>
+                                {requiresDoubleValidation && hasFirstSignature
+                                  ? 'Signer (2ème)'
+                                  : 'Signer'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -438,9 +589,7 @@ export default function BatchDetailScreen() {
         {/* Deviations */}
         {batch.deviations.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Déviations ({batch.deviations.length})
-            </Text>
+            <Text style={styles.sectionTitle}>Déviations ({batch.deviations.length})</Text>
             {batch.deviations.map((deviation) => (
               <Card key={deviation.id} style={styles.deviationCard}>
                 <View style={styles.deviationHeader}>
@@ -510,34 +659,41 @@ export default function BatchDetailScreen() {
           </View>
         )}
 
-        {/* Action Buttons */}
-        {batch.status === 'active' && currentStepIndex >= 0 && (
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                (!canValidateCurrentStep() || actionLoading) && styles.disabledButton,
-              ]}
-              onPress={handleMarkAsReady}
-              disabled={!canValidateCurrentStep() || actionLoading}
-            >
-              {actionLoading ? (
-                <ActivityIndicator size="small" color={Colors.surface} />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={20} color={Colors.surface} />
-                  <Text style={styles.primaryButtonText}>Marquer comme Prêt</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleReportDeviation}>
-              <Ionicons name="warning-outline" size={20} color={Colors.primary} />
-              <Text style={styles.secondaryButtonText}>Signaler une Déviation</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Deviation Report Button */}
+        {batch.status === 'active' && (
+          <TouchableOpacity style={styles.deviationReportButton} onPress={handleReportDeviation}>
+            <Ionicons name="warning-outline" size={20} color={Colors.error} />
+            <Text style={styles.deviationReportButtonText}>Signaler une Déviation</Text>
+          </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Electronic Signature Modal */}
+      {currentSigningStep && batch && (
+        <ElectronicSignatureModal
+          visible={signatureModalVisible}
+          onClose={() => {
+            setSignatureModalVisible(false);
+            setCurrentSigningStep(null);
+          }}
+          onSign={handleSign}
+          stepName={currentSigningStep.step_definition?.name || 'Étape'}
+          batchNumber={batch.batch_number}
+          signatureOrder={signatureOrder}
+          requiresDoubleValidation={
+            currentSigningStep.step_definition?.requires_double_validation || false
+          }
+          existingSignature={
+            batch.steps.find((s) => s.id === currentSigningStep.id)?.signatures[0]
+              ? {
+                  signerName: batch.steps.find((s) => s.id === currentSigningStep.id)!.signatures[0].signer_name,
+                  signerRole: batch.steps.find((s) => s.id === currentSigningStep.id)!.signatures[0].signer_role,
+                  signedAt: batch.steps.find((s) => s.id === currentSigningStep.id)!.signatures[0].signed_at,
+                }
+              : undefined
+          }
+        />
+      )}
     </>
   );
 }
@@ -701,9 +857,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.xs,
   },
+  stepHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flex: 1,
+  },
   stepName: {
     ...Typography.body,
     fontWeight: '700',
+  },
+  doubleValidationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+  },
+  doubleValidationText: {
+    ...Typography.small,
+    color: Colors.primary,
+    fontWeight: '600',
+    fontSize: 10,
   },
   slaWarning: {
     flexDirection: 'row',
@@ -729,9 +906,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
   },
+  assignedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.primary + '10',
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.xs,
+    alignSelf: 'flex-start',
+  },
   stepDetailText: {
     ...Typography.caption,
     color: Colors.text.secondary,
+  },
+  signaturesContainer: {
+    backgroundColor: Colors.success + '05',
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.xs,
+    borderLeftWidth: 2,
+    borderLeftColor: Colors.success,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  signaturesTitle: {
+    ...Typography.small,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  signatureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginBottom: 2,
+  },
+  signatureText: {
+    ...Typography.small,
+    color: Colors.text.secondary,
+    flex: 1,
+  },
+  pendingSignatureText: {
+    ...Typography.small,
+    color: Colors.warning,
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   stepStatusBadge: {
     alignSelf: 'flex-start',
@@ -744,6 +962,41 @@ const styles = StyleSheet.create({
     ...Typography.small,
     fontWeight: '600',
     fontSize: 11,
+  },
+  stepActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  checkInButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    borderRadius: BorderRadius.sm,
+  },
+  checkInButtonText: {
+    ...Typography.small,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  signButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.sm,
+  },
+  signButtonText: {
+    ...Typography.small,
+    color: Colors.surface,
+    fontWeight: '600',
   },
   deviationCard: {
     marginBottom: Spacing.sm,
@@ -789,40 +1042,21 @@ const styles = StyleSheet.create({
     color: Colors.text.tertiary,
     fontSize: 11,
   },
-  actionButtons: {
-    gap: Spacing.sm,
-  },
-  primaryButton: {
+  deviationReportButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.primary,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.sm,
     gap: Spacing.xs,
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  primaryButtonText: {
-    ...Typography.body,
-    color: Colors.surface,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: Spacing.md,
     backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.sm,
     borderWidth: 1,
-    borderColor: Colors.primary,
-    gap: Spacing.xs,
+    borderColor: Colors.error,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.xl,
   },
-  secondaryButtonText: {
+  deviationReportButtonText: {
     ...Typography.body,
-    color: Colors.primary,
+    color: Colors.error,
     fontWeight: '600',
   },
 });

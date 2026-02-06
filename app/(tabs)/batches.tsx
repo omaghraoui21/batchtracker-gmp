@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
 
 type Batch = Database['public']['Tables']['batches']['Row'] & {
-  current_step?: {
+  current_step?: Database['public']['Tables']['step_instances']['Row'] & {
     step_definition?: Database['public']['Tables']['step_definitions']['Row'];
   };
   critical_deviations_count?: number;
@@ -239,6 +239,16 @@ export default function BatchesScreen() {
                   </Text>
                 </View>
 
+                {/* Show who is working on current step */}
+                {batch.current_step?.assigned_to && (
+                  <View style={styles.assignedInfo}>
+                    <Ionicons name="person" size={14} color={Colors.primary} />
+                    <Text style={styles.assignedText}>
+                      En cours par: {batch.current_step.assigned_to}
+                    </Text>
+                  </View>
+                )}
+
                 <TouchableOpacity
                   style={styles.detailButton}
                   onPress={() => router.push(`/batch/${batch.id}`)}
@@ -390,6 +400,20 @@ const styles = StyleSheet.create({
   stageText: {
     ...Typography.caption,
     color: Colors.text.secondary,
+  },
+  assignedInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  assignedText: {
+    ...Typography.small,
+    color: Colors.primary,
+    fontWeight: '600',
   },
   detailButton: {
     flexDirection: 'row',
