@@ -263,7 +263,11 @@ export default function BatchesScreen() {
       </ScrollView>
 
       {/* Bouton flottant d'ajout */}
-      <TouchableOpacity style={styles.fab}>
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/batch/new')}
+        activeOpacity={0.8}
+      >
         <Ionicons name="add" size={28} color={Colors.surface} />
       </TouchableOpacity>
     </View>

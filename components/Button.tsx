@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle, View } from 'react-native';
 import { Colors, Spacing, BorderRadius } from '@/constants/theme';
 
 interface ButtonProps {
@@ -11,6 +11,7 @@ interface ButtonProps {
   loading?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
+  icon?: React.ReactNode;
 }
 
 export function Button({
@@ -22,6 +23,7 @@ export function Button({
   loading = false,
   style,
   textStyle,
+  icon,
 }: ButtonProps) {
   return (
     <TouchableOpacity
@@ -39,9 +41,12 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? Colors.surface : Colors.primary} />
       ) : (
-        <Text style={[styles[`${variant}Text`], styles[`${size}Text`], textStyle]}>
-          {title}
-        </Text>
+        <View style={styles.content}>
+          {icon && <View style={styles.icon}>{icon}</View>}
+          <Text style={[styles[`${variant}Text`], styles[`${size}Text`], textStyle]}>
+            {title}
+          </Text>
+        </View>
       )}
     </TouchableOpacity>
   );
@@ -53,6 +58,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+  },
+  icon: {
+    marginRight: Spacing.xs / 2,
   },
   primary: {
     backgroundColor: Colors.primary,

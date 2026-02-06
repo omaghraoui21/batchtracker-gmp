@@ -7,6 +7,7 @@ import { Card } from '@/components/Card';
 import { DebugAuthInfo } from '@/components/DebugAuthInfo';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Database } from '@/lib/database.types';
 
 type Batch = Database['public']['Tables']['batches']['Row'] & {
@@ -25,6 +26,7 @@ interface DashboardStats {
 export default function DashboardScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [stats, setStats] = useState<DashboardStats>({
     averageLatency: 0,
     criticalDeviations: 0,
@@ -254,6 +256,15 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Floating Quick Scan Button */}
+      <TouchableOpacity
+        style={[styles.quickScanFab, { bottom: Spacing.xl + insets.bottom }]}
+        onPress={() => router.push('/(tabs)/scanner')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="scan" size={28} color={Colors.surface} />
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -409,5 +420,20 @@ const styles = StyleSheet.create({
   batchStage: {
     ...Typography.caption,
     color: Colors.text.secondary,
+  },
+  quickScanFab: {
+    position: 'absolute',
+    right: Spacing.lg,
+    width: 64,
+    height: 64,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });
