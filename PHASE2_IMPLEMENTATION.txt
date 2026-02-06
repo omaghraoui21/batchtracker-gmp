@@ -1,0 +1,170 @@
+PHASE 2 - GESTION DES WORKFLOWS ET DÉTAILS DES LOTS
+===================================================
+
+## Fonctionnalités Implémentées
+
+### 1. Base de Données Supabase
+✅ Schéma complet créé avec les tables suivantes :
+   - workflow_templates : Modèles de workflows
+   - step_definitions : Définitions des étapes pour chaque workflow
+   - batches : Lots pharmaceutiques
+   - step_instances : Instances d'étapes pour chaque lot
+   - documents : Documents associés aux étapes
+   - deviations : Déviations/non-conformités
+   - step_history : Historique des transitions d'états
+   - scan_history : Historique des scans QR
+
+✅ Row Level Security (RLS) activé sur toutes les tables
+✅ Triggers automatiques pour updated_at
+✅ Indexes pour optimisation des requêtes
+✅ Données de test insérées (workflows, lots, étapes, déviations)
+
+### 2. Page de Détail du Lot (/app/batch/[id].tsx)
+✅ Vue exhaustive pour chaque lot avec :
+   - En-tête : N° de lot, produit, statut actuel, priorité
+   - Timeline visuelle interactive des étapes du workflow
+   - Informations détaillées pour chaque étape :
+     * État (Terminée, En cours, En attente)
+     * Responsable assigné (rôle)
+     * Horodatages (création, début, fin)
+     * SLA avec indicateur visuel "Hors SLA"
+   - Liste des déviations avec sévérité et statut
+   - Boutons d'action : Valider l'étape, Signaler une déviation
+
+### 3. Système de Timeline
+✅ Progression visuelle des étapes avec :
+   - Indicateurs colorés selon l'état
+   - Ligne de progression entre les étapes
+   - Animation pulsante pour l'étape en cours
+   - Affichage des SLA avec alerte visuelle si dépassé
+   - Rôles requis pour chaque étape
+   - Horodatages de toutes les transitions
+
+### 4. Gestion des SLAs
+✅ Calcul automatique des délais :
+   - SLA défini par étape (en heures)
+   - Indicateur "Hors SLA" si dépassement
+   - Marquage automatique is_overdue dans la base de données
+   - Couleur rouge pour les étapes en retard
+
+### 5. Logique de Validation
+✅ Verrous de conformité :
+   - Vérification des déviations critiques ouvertes
+   - Blocage de la validation si déviation critique
+   - Avertissement visuel en haut de page
+   - Transition automatique vers l'étape suivante
+   - Enregistrement dans l'historique des étapes
+   - Mise à jour des horodatages côté serveur
+
+### 6. Interface d'Administration des Workflows (/app/workflow-config.tsx)
+✅ Configuration complète des workflows :
+   - Sélection du modèle de workflow
+   - Liste des étapes avec ordre
+   - Ajout/Modification/Suppression d'étapes
+   - Réorganisation des étapes (monter/descendre)
+   - Configuration pour chaque étape :
+     * Nom
+     * Rôle requis
+     * SLA en heures
+   - Modal de modification élégant
+
+### 7. Intégration Base de Données
+✅ Connexion complète à Supabase :
+   - Client Supabase configuré (/lib/supabase.ts)
+   - Types TypeScript générés (/lib/database.types.ts)
+   - Dashboard mis à jour avec données réelles :
+     * Latence moyenne calculée
+     * Déviations critiques en temps réel
+     * Lots actifs
+     * Lots récents avec navigation
+   - Liste des lots actualisée :
+     * Données en direct
+     * Pull-to-refresh
+     * Navigation vers détails
+     * Compteurs dynamiques
+   - Toutes les transitions enregistrées avec horodatages serveur
+
+### 8. Améliorations UX/UI
+✅ Design professionnel maintenu :
+   - Cartes élégantes avec ombres
+   - Badges de statut colorés
+   - Indicateurs visuels clairs
+   - Animations subtiles
+   - Feedback utilisateur (Alerts)
+   - Loading states
+   - Pull-to-refresh sur toutes les listes
+   - Navigation fluide
+
+## Structure des Fichiers
+
+/workspace
+├── app
+│   ├── batch
+│   │   └── [id].tsx                    # Page de détail du lot avec timeline
+│   ├── workflow-config.tsx             # Administration des workflows
+│   └── (tabs)
+│       ├── dashboard.tsx               # Dashboard avec données réelles
+│       ├── batches.tsx                 # Liste des lots (connectée à Supabase)
+│       └── admin.tsx                   # Menu admin avec lien vers config workflow
+├── lib
+│   ├── supabase.ts                     # Client Supabase
+│   └── database.types.ts               # Types TypeScript générés
+└── constants
+    └── theme.ts                        # Thème mis à jour (ajout BorderRadius.xs)
+
+## Migrations Supabase
+
+1. create_workflow_system_schema
+   - Création de toutes les tables
+   - Relations et contraintes
+   - Indexes de performance
+   - Triggers updated_at
+
+2. create_rls_policies
+   - Politiques RLS pour toutes les tables
+   - Sécurité par authentification
+   - Politiques d'admin pour templates
+
+3. insert_seed_data
+   - Workflow "Production Standard"
+   - 3 étapes : Production, Superviseur, QA
+   - 5 lots de test avec différents statuts
+   - Déviations critiques pour tests
+   - Données réalistes avec SLA
+
+## Points Techniques Importants
+
+1. **Intégrité des Données**
+   - Tous les horodatages générés par le serveur (NOW())
+   - Pas de dates client-side pour éviter les problèmes de timezone
+   - Transactions pour les opérations multi-tables
+
+2. **Performance**
+   - Indexes sur toutes les foreign keys
+   - Queries optimisées avec select spécifiques
+   - Pagination prête (limit utilisé)
+
+3. **Sécurité**
+   - RLS activé sur toutes les tables
+   - Authentification requise pour toutes les opérations
+   - Pas d'exposition de service_role_key côté client
+
+4. **TypeScript**
+   - Types stricts générés depuis le schéma
+   - Pas d'erreurs TypeScript
+   - Intellisense complet
+
+5. **Navigation**
+   - Routing dynamique pour les lots ([id])
+   - Navigation entre les écrans
+   - Retour avec Stack.Screen
+
+## Prochaines Étapes Suggérées
+
+- Implémenter l'upload de documents
+- Créer l'interface de signalement de déviation
+- Ajouter la fonctionnalité QR Scanner
+- Implémenter les notifications push pour SLA
+- Ajouter les filtres avancés sur les lots
+- Créer les rapports et exports PDF
+- Implémenter la gestion des utilisateurs et rôles

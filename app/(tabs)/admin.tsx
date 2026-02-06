@@ -61,7 +61,7 @@ export default function AdminScreen() {
           icon: 'git-branch-outline',
           title: 'Workflows',
           subtitle: 'Configurer les processus',
-          onPress: () => Alert.alert('Workflows', 'Configuration des workflows'),
+          onPress: () => router.push('/workflow-config'),
         },
         {
           id: 'products',

@@ -1,0 +1,262 @@
+GUIDE D'UTILISATION - BATCHTRACKER GMP
+======================================
+
+## Démarrage
+
+L'application est déjà démarrée et le serveur Metro est actif. Vous pouvez accéder à l'application via Expo Go ou votre navigateur web.
+
+## Navigation dans l'Application
+
+### 1. Tableau de Bord (Dashboard)
+- **Accès** : Onglet "Tableau de Bord" (icône maison)
+- **Fonctionnalités** :
+  * Visualisation des KPIs en temps réel :
+    - Latence moyenne de vérification
+    - Déviations critiques ouvertes
+    - Lots actifs
+  * Liste des 3 lots les plus récents
+  * Cliquer sur un lot pour voir les détails
+  * Rafraîchir en tirant vers le bas (pull-to-refresh)
+
+### 2. Liste des Lots (Batches)
+- **Accès** : Onglet "Lots" (icône layers)
+- **Fonctionnalités** :
+  * Barre de recherche pour filtrer par numéro ou produit
+  * Statistiques rapides : Actifs, Prioritaires, Ce mois
+  * Liste complète de tous les lots
+  * Badges visuels :
+    - 🚩 Priorité élevée
+    - ⚠️ Déviations critiques
+  * Cliquer sur un lot pour voir les détails complets
+  * Rafraîchir avec pull-to-refresh
+
+### 3. Détail d'un Lot
+- **Accès** : Cliquer sur un lot depuis le Dashboard ou la liste
+- **Sections** :
+
+  #### En-tête
+  - Numéro du lot et nom du produit
+  - Statut actuel (En production / Terminé)
+  - Badge de priorité si élevée
+
+  #### Alerte Déviations
+  - Bannière rouge si déviations critiques ouvertes
+  - Indique le blocage de validation
+
+  #### Timeline des Étapes
+  - Visualisation graphique de toutes les étapes
+  - Pour chaque étape :
+    * Indicateur visuel (✓ terminée, • en cours, ○ en attente)
+    * Nom de l'étape
+    * Rôle requis
+    * Horodatages (début, fin)
+    * SLA avec badge "Hors SLA" si dépassé
+    * Statut actuel
+
+  #### Liste des Déviations
+  - Sévérité (Critique / Majeure / Mineure)
+  - Titre et description
+  - Statut (Ouvert / Résolu)
+  - Date de signalement
+
+  #### Actions Disponibles
+  - **Marquer comme Prêt** : Valider l'étape actuelle
+    * Désactivé si déviations critiques ouvertes
+    * Passe automatiquement à l'étape suivante
+    * Enregistre dans l'historique
+  - **Signaler une Déviation** : Créer une nouvelle déviation
+
+### 4. Scanner QR (En cours d'implémentation)
+- **Accès** : Onglet "Scanner"
+- **Fonctionnalités prévues** :
+  * Scanner le QR code d'un lot
+  * Scanner le QR code d'une étape
+  * Saisie manuelle si scan échoue
+  * Historique des scans
+
+### 5. Administration
+- **Accès** : Onglet "Plus" (icône menu)
+- **Sections** :
+
+  #### Profil Utilisateur
+  - Avatar avec initiales
+  - Nom, email, rôle
+  - Modifier le profil
+
+  #### Gestion
+  - **Workflows** : Configurer les processus ⭐
+    * Voir tous les modèles de workflow
+    * Sélectionner un modèle
+    * Ajouter/Modifier/Supprimer des étapes
+    * Réorganiser l'ordre des étapes
+    * Définir rôles et SLA pour chaque étape
+  - Utilisateurs (à venir)
+  - Produits (à venir)
+
+  #### Rapports
+  - Analytiques (à venir)
+  - Déviations (à venir)
+  - Journal d'Audit (à venir)
+
+  #### Paramètres
+  - Notifications (à venir)
+  - Sécurité (à venir)
+  - Sauvegarde (à venir)
+
+  #### Déconnexion
+  - Bouton rouge pour se déconnecter
+
+## Configuration des Workflows
+
+### Accéder à la Configuration
+1. Onglet "Plus"
+2. Section "Gestion"
+3. Cliquer sur "Workflows"
+
+### Sélectionner un Modèle
+- Les modèles disponibles s'affichent en haut
+- Cliquer sur un modèle pour voir ses étapes
+- Badge indique le nombre d'étapes
+
+### Gérer les Étapes
+- Chaque étape affiche :
+  * Numéro d'ordre
+  * Nom
+  * Rôle requis
+  * SLA en heures
+
+#### Ajouter une Étape
+1. Cliquer sur le bouton "+" bleu
+2. Remplir le formulaire :
+   - Nom de l'étape
+   - Rôle requis
+   - SLA en heures
+3. Cliquer sur "Enregistrer"
+
+#### Modifier une Étape
+1. Cliquer sur l'icône crayon (✏️)
+2. Modifier les champs
+3. Cliquer sur "Enregistrer"
+
+#### Réorganiser les Étapes
+- Cliquer sur ↑ pour monter
+- Cliquer sur ↓ pour descendre
+- L'ordre est sauvegardé automatiquement
+
+#### Supprimer une Étape
+1. Cliquer sur l'icône poubelle (🗑️)
+2. Confirmer la suppression
+3. L'étape est supprimée définitivement
+
+## Workflow de Validation d'un Lot
+
+### Étapes Typiques
+1. **Production** (Opérateur, SLA: 4h)
+   - Fabrication du lot
+   - Upload des documents requis
+
+2. **Superviseur** (Vérificateur, SLA: 2h)
+   - Vérification de la production
+   - Validation ou escalade
+
+3. **QA** (Qualité, SLA: 8h)
+   - Contrôle qualité final
+   - Tests et analyses
+   - Validation finale
+
+### Processus de Validation
+1. Accéder au détail du lot
+2. Vérifier que l'étape actuelle est "En cours"
+3. Vérifier qu'il n'y a pas de déviations critiques
+4. Cliquer sur "Marquer comme Prêt"
+5. Confirmer l'action
+6. Le lot passe automatiquement à l'étape suivante
+
+### Gestion des Blocages
+Si validation bloquée :
+- Vérifier les déviations critiques
+- Résoudre ou escalader les déviations
+- Une fois résolues, la validation sera possible
+
+## Indicateurs Visuels
+
+### Couleurs des Statuts
+- 🟢 Vert : Terminé / Succès
+- 🔵 Bleu : En cours / Actif
+- 🟡 Jaune : En attente
+- 🔴 Rouge : Critique / Hors SLA / Bloqué
+- ⚫ Gris : Annulé / Inactif
+
+### Badges SLA
+- "Hors SLA" en rouge : Étape dépassant le délai alloué
+- Horloge rouge : Deadline dépassée
+
+### Badges de Priorité
+- 🚩 Rouge : Priorité élevée
+- Pas de badge : Priorité normale
+
+### Badges de Déviation
+- ⚠️ Rouge : Déviations critiques ouvertes
+- Compte le nombre de déviations
+
+## Conseils d'Utilisation
+
+### Performance
+- Utilisez le pull-to-refresh pour actualiser les données
+- Les données sont mises en cache pour réduire les appels API
+- Les transitions sont enregistrées en temps réel
+
+### Workflow Optimal
+1. Commencer la journée : Rafraîchir le Dashboard
+2. Identifier les lots avec SLA risqué
+3. Traiter en priorité les lots "Hors SLA"
+4. Valider les étapes dès que possible
+5. Signaler immédiatement les déviations
+
+### Bonnes Pratiques
+- Toujours vérifier les documents avant validation
+- Signaler les déviations dès leur découverte
+- Maintenir les workflows à jour
+- Former les équipes aux rôles et responsabilités
+
+## Données de Test Disponibles
+
+### Lots
+- **#12345** (Produit A) : En cours, étape Superviseur
+- **#12346** (Produit B) : Priorité haute, déviation critique
+- **#12347** (Produit C) : En cours
+- **#12348** (Produit D) : Terminé
+- **#12349** (Produit E) : Priorité haute
+
+### Workflow
+- Modèle : "Production Standard"
+- 3 étapes configurées
+- SLA définies : 4h, 2h, 8h
+
+## Support et Développement
+
+### Fichiers Importants
+- `/workspace/app/batch/[id].tsx` : Page de détail
+- `/workspace/app/workflow-config.tsx` : Configuration workflows
+- `/workspace/lib/supabase.ts` : Client base de données
+- `/workspace/lib/database.types.ts` : Types TypeScript
+
+### Base de Données
+- Hébergée sur Supabase
+- RLS activé pour la sécurité
+- Migrations versionnées
+- Données de test insérées
+
+### Logs
+- Erreurs côté serveur : workspace/.fastshot-logs/expo-dev-server.log
+- Build web : workspace/.fastshot-logs/expo-export.log
+
+## Prochaines Fonctionnalités
+
+- Scanner QR code
+- Upload de documents
+- Notifications push pour SLA
+- Rapports et exports PDF
+- Gestion des utilisateurs
+- Analytics avancées
+- Mode hors ligne

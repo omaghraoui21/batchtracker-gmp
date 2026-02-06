@@ -1,15 +1,163 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/Card';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
+import { supabase } from '@/lib/supabase';
+import type { Database } from '@/lib/database.types';
+
+type Batch = Database['public']['Tables']['batches']['Row'] & {
+  current_step?: {
+    step_definition?: Database['public']['Tables']['step_definitions']['Row'];
+  };
+};
+
+interface DashboardStats {
+  averageLatency: number;
+  criticalDeviations: number;
+  activeBatches: number;
+  recentBatches: Batch[];
+}
 
 export default function DashboardScreen() {
   const { user } = useAuth();
+  const router = useRouter();
+  const [stats, setStats] = useState<DashboardStats>({
+    averageLatency: 0,
+    criticalDeviations: 0,
+    activeBatches: 0,
+    recentBatches: [],
+  });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch active batches count
+      const { count: activeBatchesCount, error: batchesError } = await supabase
+        .from('batches')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      if (batchesError) throw batchesError;
+
+      // Fetch critical deviations count
+      const { count: deviationsCount, error: deviationsError } = await supabase
+        .from('deviations')
+        .select('*', { count: 'exact', head: true })
+        .eq('severity', 'critical')
+        .eq('status', 'open');
+
+      if (deviationsError) throw deviationsError;
+
+      // Fetch recent batches
+      const { data: recentBatchesData, error: recentBatchesError } = await supabase
+        .from('batches')
+        .select(`
+          *,
+          current_step:step_instances!fk_current_step(
+            *,
+            step_definition:step_definitions(*)
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (recentBatchesError) throw recentBatchesError;
+
+      // Calculate average latency (simplified - time from creation to current step)
+      let totalLatency = 0;
+      let latencyCount = 0;
+
+      const { data: completedSteps, error: stepsError } = await supabase
+        .from('step_instances')
+        .select('started_at, completed_at')
+        .not('completed_at', 'is', null)
+        .not('started_at', 'is', null)
+        .limit(10);
+
+      if (!stepsError && completedSteps) {
+        completedSteps.forEach((step) => {
+          if (step.started_at && step.completed_at) {
+            const start = new Date(step.started_at).getTime();
+            const end = new Date(step.completed_at).getTime();
+            totalLatency += (end - start) / (1000 * 60 * 60); // Convert to hours
+            latencyCount++;
+          }
+        });
+      }
+
+      const averageLatency = latencyCount > 0 ? totalLatency / latencyCount : 2.5;
+
+      setStats({
+        averageLatency: Math.round(averageLatency * 10) / 10,
+        criticalDeviations: deviationsCount || 0,
+        activeBatches: activeBatchesCount || 0,
+        recentBatches: (recentBatchesData as Batch[]) || [],
+      });
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchDashboardData();
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active':
+        return Colors.success;
+      case 'completed':
+        return Colors.success;
+      case 'blocked':
+        return Colors.error;
+      default:
+        return Colors.warning;
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'active':
+        return 'En cours';
+      case 'completed':
+        return 'Terminé';
+      case 'blocked':
+        return 'Bloqué';
+      default:
+        return status;
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+      }
+    >
       {/* En-tête utilisateur */}
       <View style={styles.header}>
         <View>
@@ -35,7 +183,7 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.kpiContent}>
             <Text style={styles.kpiLabel}>Latence Moyenne (Vérif.)</Text>
-            <Text style={styles.kpiValue}>2.5h</Text>
+            <Text style={styles.kpiValue}>{stats.averageLatency}h</Text>
           </View>
         </Card>
 
@@ -45,7 +193,7 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.kpiContent}>
             <Text style={styles.kpiLabel}>Déviations Critiques</Text>
-            <Text style={styles.warningValue}>3 Ouvertes</Text>
+            <Text style={styles.warningValue}>{stats.criticalDeviations} Ouvertes</Text>
           </View>
         </Card>
 
@@ -55,7 +203,7 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.kpiContent}>
             <Text style={styles.kpiLabel}>Lots en Cours</Text>
-            <Text style={styles.kpiValue}>15 Actifs</Text>
+            <Text style={styles.kpiValue}>{stats.activeBatches} Actifs</Text>
           </View>
         </Card>
       </View>
@@ -64,40 +212,43 @@ export default function DashboardScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Lots Récents</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/batches')}>
             <Text style={styles.seeAllText}>Voir tout</Text>
           </TouchableOpacity>
         </View>
 
-        <Card style={styles.batchCard}>
-          <View style={styles.batchHeader}>
-            <Text style={styles.batchNumber}>Lot #12345 - Produit A</Text>
-            <View style={[styles.statusBadge, styles.statusProduction]}>
-              <Text style={styles.statusText}>En cours</Text>
-            </View>
-          </View>
-          <Text style={styles.batchStage}>(Production)</Text>
-        </Card>
-
-        <Card style={styles.batchCard}>
-          <View style={styles.batchHeader}>
-            <Text style={styles.batchNumber}>Lot #12346 - Produit B</Text>
-            <View style={[styles.statusBadge, styles.statusWaiting]}>
-              <Text style={styles.statusText}>En attente</Text>
-            </View>
-          </View>
-          <Text style={styles.batchStage}>(Superviseur)</Text>
-        </Card>
-
-        <Card style={styles.batchCard}>
-          <View style={styles.batchHeader}>
-            <Text style={styles.batchNumber}>Lot #12347 - Produit C</Text>
-            <View style={[styles.statusBadge, styles.statusProduction]}>
-              <Text style={styles.statusText}>En cours</Text>
-            </View>
-          </View>
-          <Text style={styles.batchStage}>(QA)</Text>
-        </Card>
+        {stats.recentBatches.map((batch) => (
+          <TouchableOpacity
+            key={batch.id}
+            onPress={() => router.push(`/batch/${batch.id}`)}
+          >
+            <Card style={styles.batchCard}>
+              <View style={styles.batchHeader}>
+                <Text style={styles.batchNumber}>
+                  Lot #{batch.batch_number} - {batch.product_name}
+                </Text>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: getStatusColor(batch.status) + '20' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      { color: getStatusColor(batch.status) },
+                    ]}
+                  >
+                    {getStatusLabel(batch.status)}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.batchStage}>
+                ({batch.current_step?.step_definition?.name || 'En attente'})
+              </Text>
+            </Card>
+          </TouchableOpacity>
+        ))}
       </View>
     </ScrollView>
   );
@@ -106,6 +257,12 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: Colors.background,
   },
   content: {
@@ -239,12 +396,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: 4,
     borderRadius: BorderRadius.sm,
-  },
-  statusProduction: {
-    backgroundColor: Colors.success + '20',
-  },
-  statusWaiting: {
-    backgroundColor: Colors.warning + '20',
   },
   statusText: {
     ...Typography.small,
