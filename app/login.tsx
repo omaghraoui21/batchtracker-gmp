@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, type AuthError } from '@/context/AuthContext';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
@@ -22,14 +22,17 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AuthError | null>(null);
   const { login } = useAuth();
   const router = useRouter();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setError('Veuillez remplir tous les champs');
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      setError({
+        type: 'credentials',
+        message: 'Veuillez remplir tous les champs',
+        canRetry: false,
+      });
       return;
     }
 
@@ -42,13 +45,40 @@ export default function LoginScreen() {
       await login(email.trim().toLowerCase(), password);
       console.log('[Login] Login successful, navigating to dashboard');
       router.replace('/(tabs)/dashboard');
-    } catch (error) {
-      const errorMessage = (error as Error).message;
-      console.error('[Login] Login failed:', errorMessage);
-      setError(errorMessage);
-      Alert.alert('Erreur de connexion', errorMessage, [
-        { text: 'OK', style: 'default' },
-      ]);
+    } catch (error: any) {
+      console.error('[Login] Login failed:', error);
+
+      const authError = error as AuthError;
+      setError(authError);
+
+      // Show alert with appropriate actions
+      const alertButtons: any[] = [{ text: 'OK', style: 'default' }];
+
+      // Add retry button if the error can be retried
+      if (authError.canRetry) {
+        alertButtons.unshift({
+          text: 'Réessayer',
+          onPress: handleLogin,
+        });
+      }
+
+      // Add diagnostics button for network errors
+      if (authError.type === 'network') {
+        alertButtons.unshift({
+          text: '🔍 Diagnostics',
+          onPress: () => router.push('/diagnostics'),
+        });
+      }
+
+      Alert.alert(
+        authError.type === 'network'
+          ? '🔌 Problème de connexion'
+          : authError.type === 'credentials'
+          ? '🔐 Erreur d\'identification'
+          : '❌ Erreur',
+        authError.message,
+        alertButtons
+      );
     } finally {
       setLoading(false);
     }
@@ -149,7 +179,42 @@ export default function LoginScreen() {
 
           {error && (
             <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>❌ {error}</Text>
+              <View style={styles.errorHeader}>
+                <Text style={styles.errorIcon}>
+                  {error.type === 'network'
+                    ? '🔌'
+                    : error.type === 'credentials'
+                    ? '🔐'
+                    : '❌'}
+                </Text>
+                <Text style={styles.errorTitle}>
+                  {error.type === 'network'
+                    ? 'Problème de connexion'
+                    : error.type === 'credentials'
+                    ? 'Erreur d\'identification'
+                    : 'Erreur'}
+                </Text>
+              </View>
+              <Text style={styles.errorText}>{error.message}</Text>
+              {error.type === 'network' && (
+                <TouchableOpacity
+                  style={styles.diagnosticsButton}
+                  onPress={() => router.push('/diagnostics')}
+                >
+                  <Text style={styles.diagnosticsButtonText}>
+                    🔍 Lancer le diagnostic réseau
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {error.canRetry && (
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={handleLogin}
+                  disabled={loading}
+                >
+                  <Text style={styles.retryButtonText}>🔄 Réessayer</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 
@@ -282,10 +347,50 @@ const styles = StyleSheet.create({
     borderColor: Colors.error,
     marginBottom: Spacing.md,
   },
+  errorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  errorIcon: {
+    fontSize: 24,
+    marginRight: Spacing.xs,
+  },
+  errorTitle: {
+    ...Typography.body,
+    fontWeight: '700',
+    color: Colors.error,
+  },
   errorText: {
     ...Typography.body,
-    color: Colors.error,
-    textAlign: 'center',
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  diagnosticsButton: {
+    marginTop: Spacing.sm,
+    padding: Spacing.sm,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+  },
+  diagnosticsButtonText: {
+    ...Typography.body,
+    color: Colors.surface,
+    fontWeight: '600',
+  },
+  retryButton: {
+    marginTop: Spacing.xs,
+    padding: Spacing.sm,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    ...Typography.body,
+    color: Colors.primary,
+    fontWeight: '600',
   },
   loginButton: {
     marginTop: Spacing.md,

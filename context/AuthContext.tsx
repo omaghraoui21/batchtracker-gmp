@@ -3,6 +3,13 @@ import { User, AuthState } from '@/types/auth';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
+export type AuthError = {
+  type: 'network' | 'credentials' | 'profile' | 'unknown';
+  message: string;
+  originalError?: any;
+  canRetry: boolean;
+};
+
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -118,71 +125,234 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string) => {
-    if (!email || !password) {
-      throw new Error('Email et mot de passe requis');
+  /**
+   * Categorize errors for better user feedback
+   */
+  const categorizeError = (error: any): AuthError => {
+    const errorMessage = error?.message || String(error);
+    const errorCode = error?.code;
+    const errorStatus = error?.status;
+
+    console.log('[AuthContext] Categorizing error:', {
+      message: errorMessage,
+      code: errorCode,
+      status: errorStatus,
+    });
+
+    // Network errors
+    if (
+      errorMessage.includes('fetch') ||
+      errorMessage.includes('network') ||
+      errorMessage.includes('Network request failed') ||
+      errorMessage.includes('timeout') ||
+      errorMessage.includes('Timeout') ||
+      errorCode === 'ECONNREFUSED' ||
+      errorCode === 'ETIMEDOUT' ||
+      !navigator.onLine
+    ) {
+      return {
+        type: 'network',
+        message:
+          'Impossible de se connecter au serveur. Vérifiez votre connexion internet et réessayez.',
+        originalError: error,
+        canRetry: true,
+      };
     }
 
-    console.log('[AuthContext] Attempting login for:', email);
-    console.log('[AuthContext] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+    // Credential errors
+    if (
+      errorMessage.includes('Invalid login credentials') ||
+      errorMessage.includes('invalid_credentials') ||
+      errorStatus === 400 ||
+      errorStatus === 401
+    ) {
+      return {
+        type: 'credentials',
+        message:
+          'Email ou mot de passe incorrect. Veuillez vérifier vos identifiants.',
+        originalError: error,
+        canRetry: false,
+      };
+    }
 
+    // Email confirmation required
+    if (errorMessage.includes('Email not confirmed')) {
+      return {
+        type: 'credentials',
+        message: 'Veuillez confirmer votre email avant de vous connecter.',
+        originalError: error,
+        canRetry: false,
+      };
+    }
+
+    // Profile loading errors
+    if (errorMessage.includes('profile') || errorCode === 'PGRST116') {
+      return {
+        type: 'profile',
+        message: 'Erreur lors du chargement du profil utilisateur.',
+        originalError: error,
+        canRetry: true,
+      };
+    }
+
+    // Unknown errors
+    return {
+      type: 'unknown',
+      message: `Erreur inattendue: ${errorMessage}`,
+      originalError: error,
+      canRetry: true,
+    };
+  };
+
+  /**
+   * Test network connectivity with timeout
+   */
+  const testConnectivity = async (timeoutMs: number = 8000): Promise<boolean> => {
     try {
-      // Test connection first
-      const { data: healthCheck, error: healthError } = await supabase
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const { error } = await supabase
         .from('profiles')
         .select('count')
-        .limit(1);
+        .limit(0)
+        .abortSignal(controller.signal);
 
-      if (healthError) {
-        console.error('[AuthContext] Connection test failed:', healthError);
-        throw new Error(
-          'Impossible de se connecter au serveur. Vérifiez votre connexion internet.'
-        );
+      clearTimeout(timeoutId);
+
+      return !error;
+    } catch (error: any) {
+      console.error('[AuthContext] Connectivity test failed:', error);
+      return false;
+    }
+  };
+
+  const login = async (email: string, password: string) => {
+    if (!email || !password) {
+      const error: AuthError = {
+        type: 'credentials',
+        message: 'Email et mot de passe requis',
+        canRetry: false,
+      };
+      throw error;
+    }
+
+    console.log('[AuthContext] ===== LOGIN ATTEMPT START =====');
+    console.log('[AuthContext] Email:', email);
+    console.log('[AuthContext] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+    console.log('[AuthContext] Timestamp:', new Date().toISOString());
+
+    try {
+      // Step 1: Test connectivity with timeout
+      console.log('[AuthContext] Step 1: Testing connectivity...');
+      const isConnected = await testConnectivity(8000);
+
+      if (!isConnected) {
+        console.error('[AuthContext] Connectivity test failed');
+        const error: AuthError = {
+          type: 'network',
+          message:
+            'Impossible de se connecter au serveur.\n\n' +
+            '📱 Vérifiez votre connexion WiFi ou données mobiles\n' +
+            '🔒 Désactivez votre VPN si vous en utilisez un\n' +
+            '🏢 Si vous êtes sur un réseau d\'entreprise, contactez votre IT',
+          canRetry: true,
+        };
+        throw error;
       }
 
-      console.log('[AuthContext] Connection test successful');
+      console.log('[AuthContext] ✅ Connectivity test passed');
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+      // Step 2: Attempt authentication with timeout
+      console.log('[AuthContext] Step 2: Attempting authentication...');
+      const authPromise = supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
         password,
       });
 
-      if (error) {
-        console.error('[AuthContext] Login failed:', {
-          message: error.message,
-          status: error.status,
-          name: error.name,
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                'La connexion prend trop de temps. Vérifiez votre réseau.'
+              )
+            ),
+          15000
+        )
+      );
+
+      const { data, error: authError } = await Promise.race([
+        authPromise,
+        timeoutPromise,
+      ]);
+
+      if (authError) {
+        console.error('[AuthContext] Authentication failed:', {
+          message: authError.message,
+          status: authError.status,
+          code: authError.code,
+        });
+        throw categorizeError(authError);
+      }
+
+      if (!data.user) {
+        console.error('[AuthContext] No user data returned');
+        const error: AuthError = {
+          type: 'unknown',
+          message: 'Connexion échouée - Aucune donnée utilisateur',
+          canRetry: true,
+        };
+        throw error;
+      }
+
+      console.log('[AuthContext] ✅ Authentication successful');
+      console.log('[AuthContext] User ID:', data.user.id);
+
+      // Step 3: Load profile (non-blocking for critical errors)
+      console.log('[AuthContext] Step 3: Loading user profile...');
+      try {
+        await loadUserProfile(data.user.id);
+        console.log('[AuthContext] ✅ Profile loaded successfully');
+      } catch (profileError: any) {
+        console.error('[AuthContext] Profile loading failed:', profileError);
+
+        // If profile loading fails but auth succeeded, we still consider it a success
+        // The user can still use the app with basic info
+        console.warn(
+          '[AuthContext] ⚠️ Continuing with basic auth info despite profile error'
+        );
+
+        // Set basic user info from auth data
+        const basicUser: User = {
+          id: data.user.id,
+          email: data.user.email || email,
+          name: data.user.email?.split('@')[0] || 'User',
+          role: 'VIEWER', // Default role for fallback
+        };
+
+        setAuthState({
+          user: basicUser,
+          isAuthenticated: true,
+          isLoading: false,
         });
 
-        // Provide more specific error messages
-        if (error.message.includes('Invalid login credentials')) {
-          throw new Error(
-            'Email ou mot de passe incorrect. Veuillez vérifier vos identifiants.'
-          );
-        } else if (error.message.includes('Email not confirmed')) {
-          throw new Error('Veuillez confirmer votre email avant de vous connecter.');
-        } else if (error.message.includes('network')) {
-          throw new Error(
-            'Erreur de connexion réseau. Vérifiez votre connexion internet.'
-          );
-        } else {
-          throw new Error(`Erreur de connexion: ${error.message}`);
-        }
+        // Don't throw, just log the warning
+        console.warn('[AuthContext] User logged in with basic profile');
+        return; // Exit successfully
       }
 
-      if (data.user) {
-        console.log('[AuthContext] Login successful for user ID:', data.user.id);
-        console.log('[AuthContext] Loading profile...');
-        await loadUserProfile(data.user.id);
-        console.log('[AuthContext] Profile loaded successfully');
+      console.log('[AuthContext] ===== LOGIN SUCCESS =====');
+    } catch (error: any) {
+      console.error('[AuthContext] ===== LOGIN FAILED =====');
+      console.error('[AuthContext] Error:', error);
+
+      // Ensure we always throw an AuthError
+      if (error.type) {
+        throw error; // Already an AuthError
       } else {
-        console.error('[AuthContext] No user data returned from login');
-        throw new Error('Connexion échouée - Aucune donnée utilisateur');
+        throw categorizeError(error);
       }
-    } catch (error) {
-      console.error('[AuthContext] Login error:', error);
-      // Re-throw the error to be handled by the UI
-      throw error;
     }
   };
 
