@@ -15,7 +15,9 @@ import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
 import ElectronicSignatureModal, { SignatureData } from '@/components/ElectronicSignatureModal';
+import DeviationReportModal, { DeviationFormData } from '@/components/DeviationReportModal';
 import * as Haptics from 'expo-haptics';
+import { generateText } from '@fastshot/ai';
 
 type Batch = Database['public']['Tables']['batches']['Row'];
 type StepInstance = Database['public']['Tables']['step_instances']['Row'] & {
@@ -38,6 +40,7 @@ export default function BatchDetailScreen() {
   const [signatureModalVisible, setSignatureModalVisible] = useState(false);
   const [currentSigningStep, setCurrentSigningStep] = useState<StepInstance | null>(null);
   const [signatureOrder, setSignatureOrder] = useState<1 | 2>(1);
+  const [deviationModalVisible, setDeviationModalVisible] = useState(false);
 
   useEffect(() => {
     fetchBatchDetails();
@@ -263,7 +266,104 @@ export default function BatchDetailScreen() {
   };
 
   const handleReportDeviation = () => {
-    Alert.alert('Signaler une Déviation', 'Fonctionnalité à venir');
+    setDeviationModalVisible(true);
+  };
+
+  const handleSubmitDeviation = async (data: DeviationFormData) => {
+    try {
+      // Mock user data - in production, get from auth context
+      const mockUserName = 'Jean Dupont';
+
+      const { error } = await supabase.from('deviations').insert({
+        title: data.title,
+        description: data.description,
+        severity: data.severity,
+        immediate_action: data.immediateAction,
+        batch_id: id,
+        step_instance_id: data.stepInstanceId,
+        reported_by: mockUserName,
+        reported_at: new Date().toISOString(),
+        status: 'open',
+      });
+
+      if (error) throw error;
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Succès', 'Déviation enregistrée avec succès');
+      fetchBatchDetails();
+    } catch (error) {
+      console.error('Error reporting deviation:', error);
+      throw error;
+    }
+  };
+
+  const handleAIAnalyze = async (description: string) => {
+    try {
+      // Use Newell AI to analyze the deviation and suggest severity and actions
+      const prompt = `Tu es un expert en qualité pharmaceutique GMP. Analyse cette déviation et fournis:
+1. Niveau de criticité (mineure/majeure/critique)
+2. Actions immédiates recommandées
+
+Déviation: ${description}
+
+Réponds au format JSON:
+{
+  "severity": "minor|major|critical",
+  "actions": "description des actions immédiates"
+}`;
+
+      const aiResponse = await generateText({ prompt });
+
+      // Parse AI response
+      try {
+        // Try to extract JSON from response
+        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            suggestedSeverity: parsed.severity as 'minor' | 'major' | 'critical',
+            suggestedActions: parsed.actions,
+          };
+        }
+      } catch {
+        console.log('Could not parse AI response as JSON, using fallback');
+      }
+
+      // Fallback: analyze keywords in description
+      const lowerDesc = description.toLowerCase();
+      let suggestedSeverity: 'minor' | 'major' | 'critical' = 'minor';
+
+      if (
+        lowerDesc.includes('critique') ||
+        lowerDesc.includes('danger') ||
+        lowerDesc.includes('contamination') ||
+        lowerDesc.includes('toxique') ||
+        lowerDesc.includes('sécurité')
+      ) {
+        suggestedSeverity = 'critical';
+      } else if (
+        lowerDesc.includes('majeur') ||
+        lowerDesc.includes('important') ||
+        lowerDesc.includes('écart') ||
+        lowerDesc.includes('hors spécification')
+      ) {
+        suggestedSeverity = 'major';
+      }
+
+      return {
+        suggestedSeverity,
+        suggestedActions:
+          'Isoler le lot concerné, documenter l\'écart observé, informer immédiatement le superviseur et le service qualité.',
+      };
+    } catch (error) {
+      console.error('AI analysis error:', error);
+      // Fallback on error
+      return {
+        suggestedSeverity: 'minor' as const,
+        suggestedActions:
+          'Documenter l\'écart et informer le superviseur pour évaluation.',
+      };
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -591,70 +691,92 @@ export default function BatchDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Déviations ({batch.deviations.length})</Text>
             {batch.deviations.map((deviation) => (
-              <Card key={deviation.id} style={styles.deviationCard}>
-                <View style={styles.deviationHeader}>
-                  <View
-                    style={[
-                      styles.severityBadge,
-                      {
-                        backgroundColor:
-                          deviation.severity === 'critical'
-                            ? Colors.error + '20'
-                            : deviation.severity === 'major'
-                            ? Colors.warning + '20'
-                            : Colors.text.tertiary + '20',
-                      },
-                    ]}
-                  >
-                    <Text
+              <TouchableOpacity
+                key={deviation.id}
+                activeOpacity={0.7}
+                onPress={() => router.push(`/deviations/${deviation.id}`)}
+              >
+                <Card style={styles.deviationCard}>
+                  <View style={styles.deviationHeader}>
+                    <View
                       style={[
-                        styles.severityText,
+                        styles.severityBadge,
                         {
-                          color:
+                          backgroundColor:
                             deviation.severity === 'critical'
-                              ? Colors.error
+                              ? Colors.error + '20'
                               : deviation.severity === 'major'
-                              ? Colors.warning
-                              : Colors.text.secondary,
+                              ? Colors.warning + '20'
+                              : Colors.text.tertiary + '20',
                         },
                       ]}
                     >
-                      {deviation.severity === 'critical'
-                        ? 'Critique'
-                        : deviation.severity === 'major'
-                        ? 'Majeure'
-                        : 'Mineure'}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.deviationStatusBadge,
-                      {
-                        backgroundColor:
-                          deviation.status === 'open'
-                            ? Colors.error + '15'
-                            : Colors.success + '15',
-                      },
-                    ]}
-                  >
-                    <Text
+                      <Text
+                        style={[
+                          styles.severityText,
+                          {
+                            color:
+                              deviation.severity === 'critical'
+                                ? Colors.error
+                                : deviation.severity === 'major'
+                                ? Colors.warning
+                                : Colors.text.secondary,
+                          },
+                        ]}
+                      >
+                        {deviation.severity === 'critical'
+                          ? 'Critique'
+                          : deviation.severity === 'major'
+                          ? 'Majeure'
+                          : 'Mineure'}
+                      </Text>
+                    </View>
+                    <View
                       style={[
-                        styles.deviationStatusText,
+                        styles.deviationStatusBadge,
                         {
-                          color: deviation.status === 'open' ? Colors.error : Colors.success,
+                          backgroundColor:
+                            deviation.status === 'open'
+                              ? Colors.error + '15'
+                              : deviation.status === 'investigating'
+                              ? Colors.warning + '15'
+                              : Colors.success + '15',
                         },
                       ]}
                     >
-                      {deviation.status === 'open' ? 'Ouvert' : 'Résolu'}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.deviationStatusText,
+                          {
+                            color:
+                              deviation.status === 'open'
+                                ? Colors.error
+                                : deviation.status === 'investigating'
+                                ? Colors.warning
+                                : Colors.success,
+                          },
+                        ]}
+                      >
+                        {deviation.status === 'open'
+                          ? 'Ouverte'
+                          : deviation.status === 'investigating'
+                          ? 'Investigation'
+                          : 'Clôturée'}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-                <Text style={styles.deviationTitle}>{deviation.title}</Text>
-                <Text style={styles.deviationDescription}>{deviation.description}</Text>
-                <Text style={styles.deviationDate}>
-                  Signalée le {formatDate(deviation.reported_at)}
-                </Text>
-              </Card>
+                  <Text style={styles.deviationTitle}>{deviation.title}</Text>
+                  <Text style={styles.deviationDescription} numberOfLines={2}>
+                    {deviation.description}
+                  </Text>
+                  <View style={styles.deviationFooter}>
+                    <Text style={styles.deviationDate}>
+                      Signalée le {formatDate(deviation.reported_at)}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.text.tertiary} />
+                  </View>
+                </Card>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -692,6 +814,18 @@ export default function BatchDetailScreen() {
                 }
               : undefined
           }
+        />
+      )}
+
+      {/* Deviation Report Modal */}
+      {batch && (
+        <DeviationReportModal
+          visible={deviationModalVisible}
+          onClose={() => setDeviationModalVisible(false)}
+          onSubmit={handleSubmitDeviation}
+          batchNumber={batch.batch_number}
+          batchId={batch.id}
+          onAIAnalyze={handleAIAnalyze}
         />
       )}
     </>
@@ -1041,6 +1175,15 @@ const styles = StyleSheet.create({
     ...Typography.small,
     color: Colors.text.tertiary,
     fontSize: 11,
+  },
+  deviationFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: Spacing.xs,
+    paddingTop: Spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
   deviationReportButton: {
     flexDirection: 'row',

@@ -85,9 +85,10 @@ export default function AdminScreen() {
         {
           id: 'deviations',
           icon: 'warning-outline',
-          title: 'Déviations',
-          subtitle: 'Historique des déviations',
-          onPress: () => Alert.alert('Déviations', 'Rapport des déviations'),
+          title: 'Déviations & CAPA',
+          subtitle: 'Gestion des déviations et actions correctives',
+          onPress: () => router.push('/deviations'),
+          color: Colors.error,
         },
         {
           id: 'audit',

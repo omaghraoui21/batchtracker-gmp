@@ -75,50 +75,77 @@ export type Database = {
         Row: {
           assigned_to: string | null
           batch_id: string | null
+          closed_at: string | null
+          closed_by: string | null
+          corrective_actions: string | null
           created_at: string | null
           description: string
           id: string
+          immediate_action: string | null
+          preventive_actions: string | null
           reported_at: string | null
           reported_by: string | null
           resolution_notes: string | null
           resolved_at: string | null
+          root_cause_analysis: string | null
           severity: string
           status: string
           step_instance_id: string | null
           title: string
           updated_at: string | null
+          verification_notes: string | null
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           assigned_to?: string | null
           batch_id?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          corrective_actions?: string | null
           created_at?: string | null
           description: string
           id?: string
+          immediate_action?: string | null
+          preventive_actions?: string | null
           reported_at?: string | null
           reported_by?: string | null
           resolution_notes?: string | null
           resolved_at?: string | null
+          root_cause_analysis?: string | null
           severity: string
           status?: string
           step_instance_id?: string | null
           title: string
           updated_at?: string | null
+          verification_notes?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           assigned_to?: string | null
           batch_id?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          corrective_actions?: string | null
           created_at?: string | null
           description?: string
           id?: string
+          immediate_action?: string | null
+          preventive_actions?: string | null
           reported_at?: string | null
           reported_by?: string | null
           resolution_notes?: string | null
           resolved_at?: string | null
+          root_cause_analysis?: string | null
           severity?: string
           status?: string
           step_instance_id?: string | null
           title?: string
           updated_at?: string | null
+          verification_notes?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: [
           {
