@@ -200,7 +200,26 @@ export default function ProductCatalogScreen() {
             backgroundColor: CobaltColors.primary,
           },
           headerTintColor: '#FFFFFF',
-          headerBackTitle: 'Retour',
+          headerBackTitle: 'Retour Admin',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/admin')}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginLeft: 16,
+                minWidth: 48,
+                minHeight: 48,
+                justifyContent: 'center',
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginLeft: 4 }}>
+                Retour Admin
+              </Text>
+            </TouchableOpacity>
+          ),
         }}
       />
       <View style={styles.container}>

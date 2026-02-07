@@ -295,8 +295,10 @@ export default function ScannerScreen() {
             <TouchableOpacity
               style={styles.cancelScanButton}
               onPress={() => setScanning(false)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Text style={styles.cancelScanText}>Annuler</Text>
+              <Ionicons name="close-circle" size={20} color={Colors.primary} style={{ marginRight: 8 }} />
+              <Text style={styles.cancelScanText}>Fermer le Scanner</Text>
             </TouchableOpacity>
           </View>
         </CameraView>
@@ -515,16 +517,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
   },
   cancelScanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: Spacing.xl,
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.md,
+    minHeight: 48,
+    minWidth: 200,
   },
   cancelScanText: {
     ...Typography.body,
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.primary,
+    fontSize: 16,
   },
   scanCard: {
     alignItems: 'center',

@@ -308,10 +308,22 @@ export default function DBAuditScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={IndustrialColors.slate[50]} />
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/admin')}
+          style={styles.backButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="chevron-back" size={24} color={IndustrialColors.steel.light} />
+          <Text style={styles.backButtonText}>Retour Système</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
+          <View style={styles.breadcrumbContainer}>
+            <Text style={styles.breadcrumb}>Admin</Text>
+            <Ionicons name="chevron-forward" size={12} color={IndustrialColors.slate[500]} />
+            <Text style={styles.breadcrumb}>Système</Text>
+            <Ionicons name="chevron-forward" size={12} color={IndustrialColors.slate[500]} />
+            <Text style={styles.breadcrumbActive}>DB Audit</Text>
+          </View>
           <Text style={styles.headerTitle}>DB AUDIT & REPAIR</Text>
           <Text style={styles.headerSubtitle}>System Diagnostics</Text>
         </View>
@@ -564,13 +576,42 @@ const styles = StyleSheet.create({
     backgroundColor: IndustrialColors.slate[800],
     borderBottomWidth: 2,
     borderBottomColor: IndustrialColors.steel.base + '40',
+    minHeight: 64,
   },
   backButton: {
-    padding: Spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 48,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  backButtonText: {
+    ...Typography.body,
+    color: IndustrialColors.steel.light,
+    fontWeight: '600',
+    fontSize: 14,
   },
   headerCenter: {
     flex: 1,
-    marginLeft: Spacing.md,
+    marginLeft: Spacing.sm,
+  },
+  breadcrumbContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+  },
+  breadcrumb: {
+    ...Typography.small,
+    color: IndustrialColors.slate[500],
+    fontSize: 11,
+  },
+  breadcrumbActive: {
+    ...Typography.small,
+    color: IndustrialColors.steel.light,
+    fontSize: 11,
+    fontWeight: '600',
   },
   headerTitle: {
     ...Typography.h3,

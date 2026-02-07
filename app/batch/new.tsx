@@ -484,12 +484,52 @@ export default function NewBatchScreen() {
     }
   };
 
+  const handleCancel = () => {
+    if (draftBatchId) {
+      // Draft exists, confirm cancellation
+      Alert.alert(
+        'Quitter le formulaire',
+        'Un brouillon a été sauvegardé. Voulez-vous revenir à la liste des lots?',
+        [
+          { text: 'Continuer l\'édition', style: 'cancel' },
+          {
+            text: 'Quitter',
+            onPress: () => router.push('/(tabs)/batches'),
+            style: 'destructive',
+          },
+        ]
+      );
+    } else {
+      // No draft, just go back
+      router.push('/(tabs)/batches');
+    }
+  };
+
   return (
     <>
       <Stack.Screen
         options={{
           title: 'Nouveau Lot',
           headerBackTitle: 'Annuler',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={handleCancel}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginLeft: 16,
+                minWidth: 48,
+                minHeight: 48,
+                justifyContent: 'center',
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="chevron-back" size={24} color={Colors.primary} />
+              <Text style={{ color: Colors.primary, fontSize: 16, fontWeight: '600', marginLeft: 4 }}>
+                Annuler
+              </Text>
+            </TouchableOpacity>
+          ),
         }}
       />
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>

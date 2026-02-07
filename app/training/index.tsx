@@ -130,6 +130,26 @@ export default function TrainingIndexScreen() {
       <Stack.Screen
         options={{
           title: 'Formation & Habilitations',
+          headerBackTitle: 'Retour Admin',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/admin')}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginLeft: 16,
+                minWidth: 48,
+                minHeight: 48,
+                justifyContent: 'center',
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="chevron-back" size={24} color={Colors.primary} />
+              <Text style={{ color: Colors.primary, fontSize: 16, fontWeight: '600', marginLeft: 4 }}>
+                Retour Admin
+              </Text>
+            </TouchableOpacity>
+          ),
           headerRight: () => (
             user?.role === 'ADMIN' && (
               <TouchableOpacity

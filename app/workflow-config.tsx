@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/Card';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
@@ -25,6 +25,7 @@ interface WorkflowWithSteps extends WorkflowTemplate {
 }
 
 export default function WorkflowConfigScreen() {
+  const router = useRouter();
   const [workflows, setWorkflows] = useState<WorkflowWithSteps[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowWithSteps | null>(null);
@@ -228,7 +229,26 @@ export default function WorkflowConfigScreen() {
       <Stack.Screen
         options={{
           title: 'Configuration du Workflow',
-          headerBackTitle: 'Retour',
+          headerBackTitle: 'Retour Admin',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/admin')}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginLeft: 16,
+                minWidth: 48,
+                minHeight: 48,
+                justifyContent: 'center',
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="chevron-back" size={24} color={Colors.primary} />
+              <Text style={{ color: Colors.primary, fontSize: 16, fontWeight: '600', marginLeft: 4 }}>
+                Retour Admin
+              </Text>
+            </TouchableOpacity>
+          ),
         }}
       />
       <View style={styles.container}>

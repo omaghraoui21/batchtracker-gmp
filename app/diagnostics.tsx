@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
@@ -328,12 +329,23 @@ export default function DiagnosticsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => router.push('/(tabs)/admin')}
           style={styles.backButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={styles.backButtonText}>← Retour</Text>
+          <Ionicons name="chevron-back" size={24} color={Colors.primary} />
+          <Text style={styles.backButtonText}>Retour Système</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Diagnostic Avancé</Text>
+        <View style={styles.headerCenter}>
+          <View style={styles.breadcrumbContainer}>
+            <Text style={styles.breadcrumb}>Admin</Text>
+            <Ionicons name="chevron-forward" size={12} color={Colors.text.tertiary} style={styles.breadcrumbSeparator} />
+            <Text style={styles.breadcrumb}>Système</Text>
+            <Ionicons name="chevron-forward" size={12} color={Colors.text.tertiary} style={styles.breadcrumbSeparator} />
+            <Text style={styles.breadcrumbActive}>Diagnostic</Text>
+          </View>
+          <Text style={styles.headerTitle}>Diagnostic Avancé</Text>
+        </View>
         <View style={styles.headerBadge}>
           <Text style={styles.headerBadgeText}>DEEP DEBUG</Text>
         </View>
@@ -551,19 +563,49 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    minHeight: 64,
   },
   backButton: {
-    padding: Spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 48,
+    minHeight: 48,
+    justifyContent: 'center',
   },
   backButtonText: {
     ...Typography.body,
     color: Colors.primary,
     fontWeight: '600',
+    fontSize: 16,
+  },
+  headerCenter: {
+    flex: 1,
+    marginLeft: Spacing.sm,
+  },
+  breadcrumbContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  breadcrumb: {
+    ...Typography.small,
+    color: Colors.text.tertiary,
+    fontSize: 11,
+  },
+  breadcrumbActive: {
+    ...Typography.small,
+    color: Colors.text.secondary,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  breadcrumbSeparator: {
+    marginHorizontal: 4,
   },
   headerTitle: {
     ...Typography.h3,
-    flex: 1,
-    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '700',
   },
   headerBadge: {
     backgroundColor: Colors.error + '15',
