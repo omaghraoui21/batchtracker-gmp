@@ -89,7 +89,7 @@ export function EnhancedDeviationReportModal({
         .order('code');
 
       if (error) throw error;
-      setDeviationTypes(data || []);
+      setDeviationTypes((data || []) as DeviationType[]);
     } catch (error) {
       console.error('Error fetching deviation types:', error);
       Alert.alert('Erreur', 'Impossible de charger les types de déviations');

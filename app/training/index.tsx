@@ -259,7 +259,7 @@ export default function TrainingIndexScreen() {
                   key={qualification.id}
                   onPress={() => router.push(`/training/sop/${qualification.sop_id}`)}
                 >
-                  <Card style={isExpiringSoon ? [styles.qualificationCard, styles.qualificationCardWarning] : styles.qualificationCard}>
+                  <Card style={isExpiringSoon ? StyleSheet.flatten([styles.qualificationCard, styles.qualificationCardWarning]) : styles.qualificationCard}>
                     <View style={styles.qualificationHeader}>
                       <View style={styles.qualificationLeft}>
                         <View

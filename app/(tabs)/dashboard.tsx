@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/components/Toast';
 import { Card } from '@/components/Card';
+import { Skeleton } from '@/components/SkeletonLoader';
 import { DebugAuthInfo } from '@/components/DebugAuthInfo';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
@@ -23,10 +25,97 @@ interface DashboardStats {
   recentBatches: Batch[];
 }
 
+/**
+ * Dashboard Skeleton - KPI cards and recent lots skeleton placeholders
+ * Maintains the Slate & Steel / industrial aesthetic during loading.
+ */
+function DashboardSkeleton() {
+  return (
+    <View>
+      {/* Header skeleton */}
+      <View style={styles.header}>
+        <View>
+          <Skeleton width={80} height={14} />
+          <Skeleton width={160} height={26} style={{ marginTop: Spacing.xs }} />
+          <Skeleton width={100} height={14} style={{ marginTop: 4 }} />
+        </View>
+        <Skeleton width={48} height={48} borderRadius={BorderRadius.full} />
+      </View>
+
+      {/* KPI Section skeleton */}
+      <View style={styles.section}>
+        <Skeleton width={160} height={22} style={{ marginBottom: Spacing.md }} />
+
+        {/* KPI Card 1 */}
+        <Card style={styles.kpiCard}>
+          <Skeleton
+            width={48}
+            height={48}
+            borderRadius={BorderRadius.sm}
+            style={{ marginRight: Spacing.md }}
+          />
+          <View style={styles.kpiContent}>
+            <Skeleton width="70%" height={14} style={{ marginBottom: 6 }} />
+            <Skeleton width="40%" height={24} />
+          </View>
+        </Card>
+
+        {/* KPI Card 2 */}
+        <Card style={{ ...styles.kpiCard, borderLeftWidth: 4, borderLeftColor: Colors.border }}>
+          <Skeleton
+            width={48}
+            height={48}
+            borderRadius={BorderRadius.sm}
+            style={{ marginRight: Spacing.md }}
+          />
+          <View style={styles.kpiContent}>
+            <Skeleton width="70%" height={14} style={{ marginBottom: 6 }} />
+            <Skeleton width="50%" height={24} />
+          </View>
+        </Card>
+
+        {/* KPI Card 3 */}
+        <Card style={styles.kpiCard}>
+          <Skeleton
+            width={48}
+            height={48}
+            borderRadius={BorderRadius.sm}
+            style={{ marginRight: Spacing.md }}
+          />
+          <View style={styles.kpiContent}>
+            <Skeleton width="60%" height={14} style={{ marginBottom: 6 }} />
+            <Skeleton width="35%" height={24} />
+          </View>
+        </Card>
+      </View>
+
+      {/* Recent Lots Section skeleton */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Skeleton width={130} height={22} />
+          <Skeleton width={60} height={14} />
+        </View>
+
+        {/* Batch card skeletons */}
+        {Array.from({ length: 3 }).map((_, index) => (
+          <Card key={index} style={styles.batchCard}>
+            <View style={styles.batchHeader}>
+              <Skeleton width="60%" height={18} />
+              <Skeleton width={70} height={24} borderRadius={BorderRadius.sm} />
+            </View>
+            <Skeleton width="40%" height={14} style={{ marginTop: Spacing.xs }} />
+          </Card>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function DashboardScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { showError } = useToast();
   const [stats, setStats] = useState<DashboardStats>({
     averageLatency: 0,
     criticalDeviations: 0,
@@ -42,7 +131,9 @@ export default function DashboardScreen() {
 
   const fetchDashboardData = async () => {
     try {
-      setLoading(true);
+      if (!refreshing) {
+        setLoading(true);
+      }
 
       // Fetch active batches count
       const { count: activeBatchesCount, error: batchesError } = await supabase
@@ -87,6 +178,13 @@ export default function DashboardScreen() {
         .not('started_at', 'is', null)
         .limit(10);
 
+      if (stepsError) {
+        showError(
+          'Erreur de chargement',
+          'Impossible de calculer la latence moyenne des etapes.'
+        );
+      }
+
       if (!stepsError && completedSteps) {
         completedSteps.forEach((step) => {
           if (step.started_at && step.completed_at) {
@@ -107,17 +205,22 @@ export default function DashboardScreen() {
         recentBatches: (recentBatchesData as Batch[]) || [],
       });
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Une erreur inconnue est survenue.';
+      showError(
+        'Erreur du tableau de bord',
+        `Impossible de charger les donnees: ${errorMessage}`
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchDashboardData();
-  };
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -137,21 +240,13 @@ export default function DashboardScreen() {
       case 'active':
         return 'En cours';
       case 'completed':
-        return 'Terminé';
+        return 'Termine';
       case 'blocked':
-        return 'Bloqué';
+        return 'Bloque';
       default:
         return status;
     }
   };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
 
   return (
     <ScrollView
@@ -164,98 +259,110 @@ export default function DashboardScreen() {
       {/* Debug Information - Only visible in development */}
       <DebugAuthInfo visible={__DEV__} />
 
-      {/* En-tête utilisateur */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Bonjour,</Text>
-          <Text style={styles.userName}>{user?.name}</Text>
-          <Text style={styles.userRole}>{user?.role}</Text>
-        </View>
-        <TouchableOpacity style={styles.notificationButton}>
-          <Ionicons name="notifications-outline" size={24} color={Colors.primary} />
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>3</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* Cartes KPI */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Indicateurs Clés</Text>
-
-        <Card style={styles.kpiCard}>
-          <View style={styles.kpiIcon}>
-            <Ionicons name="time-outline" size={24} color={Colors.primary} />
-          </View>
-          <View style={styles.kpiContent}>
-            <Text style={styles.kpiLabel}>Latence Moyenne (Vérif.)</Text>
-            <Text style={styles.kpiValue}>{stats.averageLatency}h</Text>
-          </View>
-        </Card>
-
-        <Card style={styles.warningCard}>
-          <View style={styles.warningIcon}>
-            <Ionicons name="warning-outline" size={24} color={Colors.error} />
-          </View>
-          <View style={styles.kpiContent}>
-            <Text style={styles.kpiLabel}>Déviations Critiques</Text>
-            <Text style={styles.warningValue}>{stats.criticalDeviations} Ouvertes</Text>
-          </View>
-        </Card>
-
-        <Card style={styles.kpiCard}>
-          <View style={styles.kpiIcon}>
-            <Ionicons name="layers-outline" size={24} color={Colors.success} />
-          </View>
-          <View style={styles.kpiContent}>
-            <Text style={styles.kpiLabel}>Lots en Cours</Text>
-            <Text style={styles.kpiValue}>{stats.activeBatches} Actifs</Text>
-          </View>
-        </Card>
-      </View>
-
-      {/* Lots récents */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Lots Récents</Text>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/batches')}>
-            <Text style={styles.seeAllText}>Voir tout</Text>
-          </TouchableOpacity>
-        </View>
-
-        {stats.recentBatches.map((batch) => (
-          <TouchableOpacity
-            key={batch.id}
-            onPress={() => router.push(`/batch/${batch.id}`)}
-          >
-            <Card style={styles.batchCard}>
-              <View style={styles.batchHeader}>
-                <Text style={styles.batchNumber}>
-                  Lot #{batch.batch_number} - {batch.product_name}
-                </Text>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(batch.status) + '20' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      { color: getStatusColor(batch.status) },
-                    ]}
-                  >
-                    {getStatusLabel(batch.status)}
-                  </Text>
-                </View>
+      {loading ? (
+        <DashboardSkeleton />
+      ) : (
+        <>
+          {/* En-tete utilisateur */}
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.greeting}>Bonjour,</Text>
+              <Text style={styles.userName}>{user?.name}</Text>
+              <Text style={styles.userRole}>{user?.role}</Text>
+            </View>
+            <TouchableOpacity style={styles.notificationButton}>
+              <Ionicons name="notifications-outline" size={24} color={Colors.primary} />
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>3</Text>
               </View>
-              <Text style={styles.batchStage}>
-                ({batch.current_step?.step_definition?.name || 'En attente'})
-              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Cartes KPI */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Indicateurs Cles</Text>
+
+            <Card style={styles.kpiCard}>
+              <View style={styles.kpiIcon}>
+                <Ionicons name="time-outline" size={24} color={Colors.primary} />
+              </View>
+              <View style={styles.kpiContent}>
+                <Text style={styles.kpiLabel}>Latence Moyenne (Verif.)</Text>
+                <Text style={styles.kpiValue}>{stats.averageLatency}h</Text>
+              </View>
             </Card>
-          </TouchableOpacity>
-        ))}
-      </View>
+
+            <Card style={styles.warningCard}>
+              <View style={styles.warningIcon}>
+                <Ionicons name="warning-outline" size={24} color={Colors.error} />
+              </View>
+              <View style={styles.kpiContent}>
+                <Text style={styles.kpiLabel}>Deviations Critiques</Text>
+                <Text style={styles.warningValue}>{stats.criticalDeviations} Ouvertes</Text>
+              </View>
+            </Card>
+
+            <Card style={styles.kpiCard}>
+              <View style={styles.kpiIcon}>
+                <Ionicons name="layers-outline" size={24} color={Colors.success} />
+              </View>
+              <View style={styles.kpiContent}>
+                <Text style={styles.kpiLabel}>Lots en Cours</Text>
+                <Text style={styles.kpiValue}>{stats.activeBatches} Actifs</Text>
+              </View>
+            </Card>
+          </View>
+
+          {/* Lots recents */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Lots Recents</Text>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/batches')}>
+                <Text style={styles.seeAllText}>Voir tout</Text>
+              </TouchableOpacity>
+            </View>
+
+            {stats.recentBatches.length === 0 && (
+              <Card style={styles.batchCard}>
+                <Text style={styles.emptyText}>Aucun lot recent a afficher.</Text>
+              </Card>
+            )}
+
+            {stats.recentBatches.map((batch) => (
+              <TouchableOpacity
+                key={batch.id}
+                onPress={() => router.push(`/batch/${batch.id}`)}
+              >
+                <Card style={styles.batchCard}>
+                  <View style={styles.batchHeader}>
+                    <Text style={styles.batchNumber}>
+                      Lot #{batch.batch_number} - {batch.product_name}
+                    </Text>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: getStatusColor(batch.status) + '20' },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusText,
+                          { color: getStatusColor(batch.status) },
+                        ]}
+                      >
+                        {getStatusLabel(batch.status)}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.batchStage}>
+                    ({batch.current_step?.step_definition?.name || 'En attente'})
+                  </Text>
+                </Card>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
 
       {/* Floating Quick Scan Button */}
       <TouchableOpacity
@@ -272,12 +379,6 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: Colors.background,
   },
   content: {
@@ -420,6 +521,12 @@ const styles = StyleSheet.create({
   batchStage: {
     ...Typography.caption,
     color: Colors.text.secondary,
+  },
+  emptyText: {
+    ...Typography.caption,
+    color: Colors.text.tertiary,
+    textAlign: 'center',
+    paddingVertical: Spacing.md,
   },
   quickScanFab: {
     position: 'absolute',

@@ -3,9 +3,11 @@
  *
  * Comprehensive user management interface for Admins to create, read, update,
  * and delete users with full RBAC enforcement and audit logging.
+ *
+ * GMP Roles: ADMIN | SUPERUSER | PRODUCTION | SUPERVISOR | QA | VIEWER
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,6 +25,7 @@ import { Card } from '@/components/Card';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/components/Toast';
 import { UserListSkeleton } from '@/components/SkeletonLoader';
 import { logUserCreation, logUserUpdate } from '@/lib/auditLog';
 import * as Haptics from 'expo-haptics';
@@ -30,49 +33,113 @@ import type { Database } from '@/lib/database.types';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
+/**
+ * All GMP-compliant roles available in the system.
+ */
+const ALL_ROLES = ['ADMIN', 'SUPERUSER', 'PRODUCTION', 'SUPERVISOR', 'QA', 'VIEWER'] as const;
+type UserRole = (typeof ALL_ROLES)[number];
+
+/**
+ * French labels for each GMP role.
+ */
+const ROLE_LABELS: Record<UserRole, string> = {
+  ADMIN: 'Administrateur',
+  SUPERUSER: 'Super Utilisateur',
+  PRODUCTION: 'Operateur Production',
+  SUPERVISOR: 'Superviseur',
+  QA: 'Qualite (QA)',
+  VIEWER: 'Observateur',
+};
+
+/**
+ * Color mapping for each role (badge backgrounds and text).
+ */
+const ROLE_COLORS: Record<UserRole, string> = {
+  ADMIN: Colors.error,
+  SUPERUSER: '#8B5CF6',       // Purple for superuser
+  PRODUCTION: Colors.success,
+  SUPERVISOR: Colors.primary,
+  QA: Colors.warning,
+  VIEWER: Colors.text.secondary,
+};
+
 interface UserFormData {
   name: string;
   email: string;
-  role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
+  role: UserRole;
   department: string;
   phone: string;
   is_active: boolean;
 }
 
+const INITIAL_FORM_DATA: UserFormData = {
+  name: '',
+  email: '',
+  role: 'VIEWER',
+  department: '',
+  phone: '',
+  is_active: true,
+};
+
+/**
+ * Generate a UUID with fallback for environments where crypto.randomUUID is unavailable.
+ */
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fallback: RFC4122 v4 UUID generation
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
+ * Validate a phone number.
+ * Accepts international formats like +33 1 23 45 67 89 or local numbers.
+ * Returns an error message in French if invalid, or null if valid/empty.
+ */
+function validatePhone(phone: string): string | null {
+  if (!phone.trim()) return null; // Phone is optional
+  // Strip spaces, dashes, dots for validation
+  const cleaned = phone.replace(/[\s\-().]/g, '');
+  // Must be digits with optional leading +
+  if (!/^\+?\d{7,15}$/.test(cleaned)) {
+    return 'Numero de telephone invalide (7-15 chiffres, + optionnel)';
+  }
+  return null;
+}
+
+/**
+ * Validate an email address.
+ * Returns an error message in French if invalid, or null if valid.
+ */
+function validateEmail(email: string): string | null {
+  if (!email.trim()) return 'L\'email est requis';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    return 'Format d\'email invalide';
+  }
+  return null;
+}
+
 export default function UsersManagementScreen() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
+  const toast = useToast();
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
-  const [formData, setFormData] = useState<UserFormData>({
-    name: '',
-    email: '',
-    role: 'OPERATOR',
-    department: '',
-    phone: '',
-    is_active: true,
-  });
+  const [formData, setFormData] = useState<UserFormData>({ ...INITIAL_FORM_DATA });
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof UserFormData, string>>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  // Access control: Only ADMIN can access this screen
-  useEffect(() => {
-    if (currentUser && currentUser.role !== 'ADMIN') {
-      Alert.alert('Accès refusé', 'Vous devez avoir le rôle ADMIN pour accéder à cette section.', [
-        { text: 'Retour', onPress: () => router.back() },
-      ]);
-    }
-  }, [currentUser, router]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -84,33 +151,67 @@ export default function UsersManagementScreen() {
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
-      Alert.alert('Erreur', 'Impossible de charger la liste des utilisateurs');
+      toast.showError('Erreur', 'Impossible de charger la liste des utilisateurs');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [toast]);
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchUsers();
-  };
+  }, [fetchUsers]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  // Access control: Only ADMIN can access this screen
+  useEffect(() => {
+    if (currentUser && currentUser.role !== 'ADMIN') {
+      toast.showError(
+        'Acces refuse',
+        'Vous devez avoir le role ADMIN pour acceder a cette section.'
+      );
+      router.back();
+    }
+  }, [currentUser, router, toast]);
 
   const validateForm = (): boolean => {
     const errors: Partial<Record<keyof UserFormData, string>> = {};
 
+    // Name validation
     if (!formData.name.trim()) {
       errors.name = 'Le nom est requis';
+    } else if (formData.name.trim().length < 2) {
+      errors.name = 'Le nom doit contenir au moins 2 caracteres';
+    } else if (formData.name.trim().length > 100) {
+      errors.name = 'Le nom ne peut pas depasser 100 caracteres';
     }
 
-    if (!formData.email.trim()) {
-      errors.email = 'L\'email est requis';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      errors.email = 'Email invalide';
+    // Email validation
+    const emailError = validateEmail(formData.email);
+    if (emailError) {
+      errors.email = emailError;
     }
 
+    // Department validation
     if (!formData.department.trim()) {
-      errors.department = 'Le département est requis';
+      errors.department = 'Le departement est requis';
+    } else if (formData.department.trim().length > 100) {
+      errors.department = 'Le departement ne peut pas depasser 100 caracteres';
+    }
+
+    // Phone validation
+    const phoneError = validatePhone(formData.phone);
+    if (phoneError) {
+      errors.phone = phoneError;
+    }
+
+    // Role validation
+    if (!ALL_ROLES.includes(formData.role)) {
+      errors.role = 'Role invalide selectionne';
     }
 
     setFormErrors(errors);
@@ -119,7 +220,8 @@ export default function UsersManagementScreen() {
 
   const checkEmailUnique = async (email: string, excludeUserId?: string): Promise<boolean> => {
     try {
-      let query = supabase.from('profiles').select('email').eq('email', email);
+      setCheckingEmail(true);
+      let query = supabase.from('profiles').select('id, email').eq('email', email.trim().toLowerCase());
 
       if (excludeUserId) {
         query = query.neq('id', excludeUserId);
@@ -132,37 +234,51 @@ export default function UsersManagementScreen() {
       return !data || data.length === 0;
     } catch (error) {
       console.error('Error checking email uniqueness:', error);
+      // On error, assume not unique to prevent duplicates
       return false;
+    } finally {
+      setCheckingEmail(false);
     }
   };
 
   const handleCreateUser = async () => {
-    if (!validateForm()) return;
-
-    // Check email uniqueness
-    const isUnique = await checkEmailUnique(formData.email);
-    if (!isUnique) {
-      Alert.alert('Erreur', 'Cet email est déjà utilisé');
+    if (!validateForm()) {
+      toast.showWarning('Formulaire incomplet', 'Veuillez corriger les erreurs du formulaire.');
       return;
     }
 
     try {
       setSubmitting(true);
+
+      // Check email uniqueness
+      const isUnique = await checkEmailUnique(formData.email);
+      if (!isUnique) {
+        setFormErrors((prev) => ({
+          ...prev,
+          email: 'Cet email est deja utilise par un autre utilisateur',
+        }));
+        toast.showError(
+          'Email en double',
+          `L'adresse "${formData.email.trim()}" est deja attribuee a un utilisateur existant.`
+        );
+        return;
+      }
+
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       // Generate a UUID for the new user
-      const newUserId = crypto.randomUUID();
+      const newUserId = generateUUID();
 
       // Create user profile
       const { data: newUser, error } = await supabase
         .from('profiles')
         .insert({
           id: newUserId,
-          name: formData.name,
-          email: formData.email,
+          name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
           role: formData.role,
-          department: formData.department,
-          phone: formData.phone || null,
+          department: formData.department.trim(),
+          phone: formData.phone.trim() || null,
           is_active: formData.is_active,
         })
         .select()
@@ -171,62 +287,74 @@ export default function UsersManagementScreen() {
       if (error) throw error;
 
       // Log user creation for audit trail
-      await logUserCreation(
-        newUser.id,
-        newUser.email,
-        currentUser?.id || 'system',
-        currentUser?.name || 'System',
-        currentUser?.role || 'ADMIN',
-        newUser.role
-      );
+      try {
+        await logUserCreation(
+          newUser.id,
+          newUser.email,
+          currentUser?.id || 'system',
+          currentUser?.name || 'System',
+          currentUser?.role || 'ADMIN',
+          newUser.role
+        );
+      } catch (auditError) {
+        console.error('Audit log error (non-blocking):', auditError);
+      }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Succès', `Utilisateur ${formData.name} créé avec succès`, [
-        { text: 'OK', onPress: () => setShowCreateModal(false) },
-      ]);
+      toast.showSuccess(
+        'Utilisateur cree',
+        `${formData.name.trim()} (${ROLE_LABELS[formData.role]}) a ete ajoute avec succes.`
+      );
+
+      // Close modal and reset form
+      setShowCreateModal(false);
+      setFormData({ ...INITIAL_FORM_DATA });
+      setFormErrors({});
 
       // Refresh user list
       fetchUsers();
-
-      // Reset form
-      setFormData({
-        name: '',
-        email: '',
-        role: 'OPERATOR',
-        department: '',
-        phone: '',
-        is_active: true,
-      });
     } catch (error) {
       console.error('Error creating user:', error);
-      Alert.alert('Erreur', 'Impossible de créer l\'utilisateur');
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.showError('Erreur de creation', 'Impossible de creer l\'utilisateur. Veuillez reessayer.');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleUpdateUser = async () => {
-    if (!editingUser || !validateForm()) return;
-
-    // Check email uniqueness (excluding current user)
-    const isUnique = await checkEmailUnique(formData.email, editingUser.id);
-    if (!isUnique) {
-      Alert.alert('Erreur', 'Cet email est déjà utilisé');
+    if (!editingUser || !validateForm()) {
+      toast.showWarning('Formulaire incomplet', 'Veuillez corriger les erreurs du formulaire.');
       return;
     }
 
     try {
       setSubmitting(true);
+
+      // Check email uniqueness (excluding current user)
+      const isUnique = await checkEmailUnique(formData.email, editingUser.id);
+      if (!isUnique) {
+        setFormErrors((prev) => ({
+          ...prev,
+          email: 'Cet email est deja utilise par un autre utilisateur',
+        }));
+        toast.showError(
+          'Email en double',
+          `L'adresse "${formData.email.trim()}" est deja attribuee a un autre utilisateur.`
+        );
+        return;
+      }
+
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       const { error } = await supabase
         .from('profiles')
         .update({
-          name: formData.name,
-          email: formData.email,
+          name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
           role: formData.role,
-          department: formData.department,
-          phone: formData.phone || null,
+          department: formData.department.trim(),
+          phone: formData.phone.trim() || null,
           is_active: formData.is_active,
           updated_at: new Date().toISOString(),
         })
@@ -235,48 +363,56 @@ export default function UsersManagementScreen() {
       if (error) throw error;
 
       // Log user update for audit trail
-      await logUserUpdate(
-        editingUser.id,
-        formData.email,
-        currentUser?.id || 'system',
-        currentUser?.name || 'System',
-        currentUser?.role || 'ADMIN',
-        {
-          name: formData.name,
-          email: formData.email,
-          role: formData.role,
-          department: formData.department,
-        }
-      );
+      try {
+        await logUserUpdate(
+          editingUser.id,
+          formData.email.trim().toLowerCase(),
+          currentUser?.id || 'system',
+          currentUser?.name || 'System',
+          currentUser?.role || 'ADMIN',
+          {
+            name: formData.name.trim(),
+            email: formData.email.trim().toLowerCase(),
+            role: formData.role,
+            department: formData.department.trim(),
+          }
+        );
+      } catch (auditError) {
+        console.error('Audit log error (non-blocking):', auditError);
+      }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Succès', 'Utilisateur mis à jour avec succès');
+      toast.showSuccess(
+        'Utilisateur mis a jour',
+        `${formData.name.trim()} a ete modifie avec succes.`
+      );
+
+      // Close modal and reset form
+      setEditingUser(null);
+      setShowCreateModal(false);
+      setFormData({ ...INITIAL_FORM_DATA });
+      setFormErrors({});
 
       // Refresh user list
       fetchUsers();
-
-      // Close modal
-      setEditingUser(null);
-      setFormData({
-        name: '',
-        email: '',
-        role: 'OPERATOR',
-        department: '',
-        phone: '',
-        is_active: true,
-      });
     } catch (error) {
       console.error('Error updating user:', error);
-      Alert.alert('Erreur', 'Impossible de mettre à jour l\'utilisateur');
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.showError('Erreur de mise a jour', 'Impossible de mettre a jour l\'utilisateur.');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteUser = (user: Profile) => {
+    if (user.id === currentUser?.id) {
+      toast.showWarning('Action interdite', 'Vous ne pouvez pas supprimer votre propre compte.');
+      return;
+    }
+
     Alert.alert(
       'Confirmer la suppression',
-      `Êtes-vous sûr de vouloir supprimer l'utilisateur ${user.name} ?`,
+      `Etes-vous sur de vouloir supprimer l'utilisateur ${user.name} ?\n\nCette action est irreversible.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -289,11 +425,15 @@ export default function UsersManagementScreen() {
               if (error) throw error;
 
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert('Succès', 'Utilisateur supprimé avec succès');
+              toast.showSuccess(
+                'Utilisateur supprime',
+                `${user.name} a ete supprime avec succes.`
+              );
               fetchUsers();
             } catch (error) {
               console.error('Error deleting user:', error);
-              Alert.alert('Erreur', 'Impossible de supprimer l\'utilisateur');
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              toast.showError('Erreur', 'Impossible de supprimer l\'utilisateur.');
             }
           },
         },
@@ -306,59 +446,36 @@ export default function UsersManagementScreen() {
     setFormData({
       name: user.name,
       email: user.email,
-      role: user.role as 'ADMIN' | 'MANAGER' | 'OPERATOR',
+      role: (ALL_ROLES.includes(user.role as UserRole) ? user.role : 'VIEWER') as UserRole,
       department: user.department || '',
       phone: user.phone || '',
       is_active: user.is_active ?? true,
     });
+    setFormErrors({});
     setShowCreateModal(true);
   };
 
   const closeModal = () => {
     setShowCreateModal(false);
     setEditingUser(null);
-    setFormData({
-      name: '',
-      email: '',
-      role: 'OPERATOR',
-      department: '',
-      phone: '',
-      is_active: true,
-    });
+    setFormData({ ...INITIAL_FORM_DATA });
     setFormErrors({});
   };
 
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'ADMIN':
-        return Colors.error;
-      case 'MANAGER':
-        return Colors.primary;
-      case 'OPERATOR':
-        return Colors.success;
-      default:
-        return Colors.text.secondary;
-    }
+  const getRoleColor = (role: string): string => {
+    return ROLE_COLORS[role as UserRole] || Colors.text.secondary;
   };
 
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'ADMIN':
-        return 'Administrateur';
-      case 'MANAGER':
-        return 'Superviseur';
-      case 'OPERATOR':
-        return 'Opérateur';
-      default:
-        return role;
-    }
+  const getRoleLabel = (role: string): string => {
+    return ROLE_LABELS[role as UserRole] || role;
   };
 
   const filteredUsers = users.filter(
     (user) =>
       user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.department?.toLowerCase().includes(searchQuery.toLowerCase())
+      user.department?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      getRoleLabel(user.role).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (currentUser?.role !== 'ADMIN') {
@@ -438,17 +555,30 @@ export default function UsersManagementScreen() {
 
           {loading ? (
             <UserListSkeleton count={5} />
+          ) : filteredUsers.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={48} color={Colors.text.tertiary} />
+              <Text style={styles.emptyStateTitle}>
+                {searchQuery ? 'Aucun resultat' : 'Aucun utilisateur'}
+              </Text>
+              <Text style={styles.emptyStateText}>
+                {searchQuery
+                  ? `Aucun utilisateur ne correspond a "${searchQuery}"`
+                  : 'Commencez par creer un utilisateur avec le bouton +'}
+              </Text>
+            </View>
           ) : (
             filteredUsers.map((user) => (
               <Card key={user.id} style={styles.userCard}>
                 <View style={styles.userHeader}>
-                  <View style={styles.userAvatar}>
+                  <View style={[styles.userAvatar, !user.is_active && styles.userAvatarInactive]}>
                     <Text style={styles.userAvatarText}>
                       {user.name
                         .split(' ')
                         .map((n) => n[0])
                         .join('')
-                        .toUpperCase()}
+                        .toUpperCase()
+                        .slice(0, 2)}
                     </Text>
                   </View>
                   <View style={styles.userInfo}>
@@ -490,7 +620,12 @@ export default function UsersManagementScreen() {
         {/* Create User FAB */}
         <TouchableOpacity
           style={styles.fab}
-          onPress={() => setShowCreateModal(true)}
+          onPress={() => {
+            setFormData({ ...INITIAL_FORM_DATA });
+            setFormErrors({});
+            setEditingUser(null);
+            setShowCreateModal(true);
+          }}
           activeOpacity={0.8}
         >
           <Ionicons name="add" size={28} color={Colors.surface} />
@@ -500,15 +635,25 @@ export default function UsersManagementScreen() {
         {showCreateModal && (
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <ScrollView>
+              <ScrollView keyboardShouldPersistTaps="handled">
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>
                     {editingUser ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur'}
                   </Text>
-                  <TouchableOpacity onPress={closeModal}>
+                  <TouchableOpacity onPress={closeModal} disabled={submitting}>
                     <Ionicons name="close" size={24} color={Colors.text.primary} />
                   </TouchableOpacity>
                 </View>
+
+                {/* Submission overlay */}
+                {submitting && (
+                  <View style={styles.submittingOverlay}>
+                    <ActivityIndicator size="large" color={Colors.primary} />
+                    <Text style={styles.submittingText}>
+                      {editingUser ? 'Mise a jour en cours...' : 'Creation en cours...'}
+                    </Text>
+                  </View>
+                )}
 
                 {/* Form Fields */}
                 <View style={styles.formGroup}>
@@ -518,9 +663,14 @@ export default function UsersManagementScreen() {
                   <TextInput
                     style={[styles.input, formErrors.name && styles.inputError]}
                     value={formData.name}
-                    onChangeText={(text) => setFormData({ ...formData, name: text })}
+                    onChangeText={(text) => {
+                      setFormData({ ...formData, name: text });
+                      if (formErrors.name) setFormErrors((prev) => ({ ...prev, name: undefined }));
+                    }}
                     placeholder="Ex: Jean Dupont"
                     placeholderTextColor={Colors.text.tertiary}
+                    editable={!submitting}
+                    maxLength={100}
                   />
                   {formErrors.name && <Text style={styles.errorText}>{formErrors.name}</Text>}
                 </View>
@@ -529,24 +679,39 @@ export default function UsersManagementScreen() {
                   <Text style={styles.label}>
                     Email <Text style={styles.required}>*</Text>
                   </Text>
-                  <TextInput
-                    style={[styles.input, formErrors.email && styles.inputError]}
-                    value={formData.email}
-                    onChangeText={(text) => setFormData({ ...formData, email: text })}
-                    placeholder="Ex: jean.dupont@example.com"
-                    placeholderTextColor={Colors.text.tertiary}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
+                  <View style={styles.emailInputContainer}>
+                    <TextInput
+                      style={[styles.input, styles.emailInput, formErrors.email && styles.inputError]}
+                      value={formData.email}
+                      onChangeText={(text) => {
+                        setFormData({ ...formData, email: text });
+                        if (formErrors.email) setFormErrors((prev) => ({ ...prev, email: undefined }));
+                      }}
+                      placeholder="Ex: jean.dupont@example.com"
+                      placeholderTextColor={Colors.text.tertiary}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!submitting}
+                    />
+                    {checkingEmail && (
+                      <ActivityIndicator
+                        size="small"
+                        color={Colors.primary}
+                        style={styles.emailSpinner}
+                      />
+                    )}
+                  </View>
                   {formErrors.email && <Text style={styles.errorText}>{formErrors.email}</Text>}
                 </View>
 
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>
-                    Rôle <Text style={styles.required}>*</Text>
+                    Role <Text style={styles.required}>*</Text>
                   </Text>
+                  {formErrors.role && <Text style={styles.errorText}>{formErrors.role}</Text>}
                   <View style={styles.roleSelector}>
-                    {(['ADMIN', 'MANAGER', 'OPERATOR'] as const).map((role) => (
+                    {ALL_ROLES.map((role) => (
                       <TouchableOpacity
                         key={role}
                         style={[
@@ -554,15 +719,20 @@ export default function UsersManagementScreen() {
                           formData.role === role && styles.roleSelectorButtonActive,
                           formData.role === role && { borderColor: getRoleColor(role) },
                         ]}
-                        onPress={() => setFormData({ ...formData, role })}
+                        onPress={() => {
+                          setFormData({ ...formData, role });
+                          if (formErrors.role) setFormErrors((prev) => ({ ...prev, role: undefined }));
+                        }}
+                        disabled={submitting}
                       >
                         <Text
                           style={[
                             styles.roleSelectorText,
-                            formData.role === role && { color: getRoleColor(role) },
+                            formData.role === role && { color: getRoleColor(role), fontWeight: '700' },
                           ]}
+                          numberOfLines={2}
                         >
-                          {getRoleLabel(role)}
+                          {ROLE_LABELS[role]}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -571,28 +741,38 @@ export default function UsersManagementScreen() {
 
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>
-                    Département/Unité <Text style={styles.required}>*</Text>
+                    Departement/Unite <Text style={styles.required}>*</Text>
                   </Text>
                   <TextInput
                     style={[styles.input, formErrors.department && styles.inputError]}
                     value={formData.department}
-                    onChangeText={(text) => setFormData({ ...formData, department: text })}
-                    placeholder="Ex: Stérile, Pesée, QA"
+                    onChangeText={(text) => {
+                      setFormData({ ...formData, department: text });
+                      if (formErrors.department) setFormErrors((prev) => ({ ...prev, department: undefined }));
+                    }}
+                    placeholder="Ex: Sterile, Pesee, QA"
                     placeholderTextColor={Colors.text.tertiary}
+                    editable={!submitting}
+                    maxLength={100}
                   />
                   {formErrors.department && <Text style={styles.errorText}>{formErrors.department}</Text>}
                 </View>
 
                 <View style={styles.formGroup}>
-                  <Text style={styles.label}>Téléphone</Text>
+                  <Text style={styles.label}>Telephone</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, formErrors.phone && styles.inputError]}
                     value={formData.phone}
-                    onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                    onChangeText={(text) => {
+                      setFormData({ ...formData, phone: text });
+                      if (formErrors.phone) setFormErrors((prev) => ({ ...prev, phone: undefined }));
+                    }}
                     placeholder="Ex: +33 1 23 45 67 89"
                     placeholderTextColor={Colors.text.tertiary}
                     keyboardType="phone-pad"
+                    editable={!submitting}
                   />
+                  {formErrors.phone && <Text style={styles.errorText}>{formErrors.phone}</Text>}
                 </View>
 
                 <View style={styles.formGroup}>
@@ -601,12 +781,18 @@ export default function UsersManagementScreen() {
                     <TouchableOpacity
                       style={[styles.switch, formData.is_active && styles.switchActive]}
                       onPress={() => setFormData({ ...formData, is_active: !formData.is_active })}
+                      disabled={submitting}
                     >
                       <View
                         style={[styles.switchThumb, formData.is_active && styles.switchThumbActive]}
                       />
                     </TouchableOpacity>
                   </View>
+                  <Text style={styles.switchHint}>
+                    {formData.is_active
+                      ? 'L\'utilisateur pourra se connecter'
+                      : 'L\'utilisateur ne pourra pas se connecter'}
+                  </Text>
                 </View>
 
                 {/* Action Buttons */}
@@ -619,15 +805,24 @@ export default function UsersManagementScreen() {
                     <Text style={styles.cancelButtonText}>Annuler</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.modalButton, styles.submitButton]}
+                    style={[
+                      styles.modalButton,
+                      styles.submitButton,
+                      submitting && styles.submitButtonDisabled,
+                    ]}
                     onPress={editingUser ? handleUpdateUser : handleCreateUser}
-                    disabled={submitting}
+                    disabled={submitting || checkingEmail}
                   >
                     {submitting ? (
-                      <ActivityIndicator color={Colors.surface} />
+                      <View style={styles.submitLoadingContainer}>
+                        <ActivityIndicator color={Colors.surface} size="small" />
+                        <Text style={[styles.submitButtonText, { marginLeft: Spacing.xs }]}>
+                          {editingUser ? 'Mise a jour...' : 'Creation...'}
+                        </Text>
+                      </View>
                     ) : (
                       <Text style={styles.submitButtonText}>
-                        {editingUser ? 'Mettre à jour' : 'Créer'}
+                        {editingUser ? 'Mettre a jour' : 'Creer'}
                       </Text>
                     )}
                   </TouchableOpacity>
@@ -694,6 +889,22 @@ const styles = StyleSheet.create({
     ...Typography.small,
     color: Colors.text.secondary,
   },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl * 2,
+    gap: Spacing.sm,
+  },
+  emptyStateTitle: {
+    ...Typography.h3,
+    color: Colors.text.secondary,
+    marginTop: Spacing.sm,
+  },
+  emptyStateText: {
+    ...Typography.caption,
+    color: Colors.text.tertiary,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
   userCard: {
     marginBottom: Spacing.md,
   },
@@ -709,6 +920,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: Spacing.md,
+  },
+  userAvatarInactive: {
+    backgroundColor: Colors.inactive,
   },
   userAvatarText: {
     ...Typography.body,
@@ -732,6 +946,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
+    flexWrap: 'wrap',
   },
   roleBadge: {
     paddingHorizontal: Spacing.sm,
@@ -817,6 +1032,18 @@ const styles = StyleSheet.create({
   modalTitle: {
     ...Typography.h3,
   },
+  submittingOverlay: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  submittingText: {
+    ...Typography.caption,
+    color: Colors.primary,
+    marginTop: Spacing.sm,
+    fontWeight: '600',
+  },
   formGroup: {
     marginBottom: Spacing.lg,
   },
@@ -840,6 +1067,18 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: Colors.error,
   },
+  emailInputContainer: {
+    position: 'relative',
+  },
+  emailInput: {
+    paddingRight: Spacing.xl + Spacing.md,
+  },
+  emailSpinner: {
+    position: 'absolute',
+    right: Spacing.md,
+    top: '50%',
+    marginTop: -10,
+  },
   errorText: {
     ...Typography.small,
     color: Colors.error,
@@ -847,16 +1086,21 @@ const styles = StyleSheet.create({
   },
   roleSelector: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.sm,
   },
   roleSelectorButton: {
-    flex: 1,
-    padding: Spacing.md,
+    width: '30%',
+    flexGrow: 1,
+    minWidth: 90,
+    padding: Spacing.sm,
     backgroundColor: Colors.background,
     borderWidth: 2,
     borderColor: Colors.border,
     borderRadius: BorderRadius.sm,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   roleSelectorButtonActive: {
     backgroundColor: Colors.surface,
@@ -866,6 +1110,8 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontWeight: '600',
     color: Colors.text.secondary,
+    textAlign: 'center',
+    fontSize: 12,
   },
   switchContainer: {
     flexDirection: 'row',
@@ -892,6 +1138,11 @@ const styles = StyleSheet.create({
   switchThumbActive: {
     alignSelf: 'flex-end',
   },
+  switchHint: {
+    ...Typography.small,
+    color: Colors.text.tertiary,
+    marginTop: Spacing.xs,
+  },
   modalActions: {
     flexDirection: 'row',
     gap: Spacing.sm,
@@ -916,9 +1167,17 @@ const styles = StyleSheet.create({
   submitButton: {
     backgroundColor: Colors.primary,
   },
+  submitButtonDisabled: {
+    opacity: 0.7,
+  },
   submitButtonText: {
     ...Typography.body,
     color: Colors.surface,
     fontWeight: '700',
+  },
+  submitLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

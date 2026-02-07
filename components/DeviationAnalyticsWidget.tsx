@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { Card } from './Card';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
@@ -16,7 +15,6 @@ interface DeviationStats {
 }
 
 export function DeviationAnalyticsWidget() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DeviationStats>({
     byPerson: [],
@@ -84,7 +82,7 @@ export function DeviationAnalyticsWidget() {
       // Average holding time per operator
       const { data: batchOwnership } = await supabase.rpc('get_avg_holding_time');
 
-      const avgHoldingTime = batchOwnership || [];
+      const avgHoldingTime = (batchOwnership || []) as { person: string; avgHours: number }[];
 
       // Batches exceeding SLA
       const { data: slaData } = await supabase
@@ -244,7 +242,7 @@ export function DeviationAnalyticsWidget() {
 
       {/* Batches Exceeding SLA */}
       {stats.slaExceeded.length > 0 && (
-        <Card style={[styles.card, styles.alertCard]}>
+        <Card style={StyleSheet.flatten([styles.card, styles.alertCard])}>
           <View style={styles.header}>
             <Ionicons name="alert-circle-outline" size={24} color={Colors.error} />
             <Text style={[styles.title, { color: Colors.error }]}>Lots Hors SLA</Text>

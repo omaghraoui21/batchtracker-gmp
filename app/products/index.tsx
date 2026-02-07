@@ -12,12 +12,11 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/Card';
-import { Button } from '@/components/Button';
-import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
+import { Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
 import * as Haptics from 'expo-haptics';
-import { logProductAdded, logProductModified, logProductArchived } from '@/lib/auditLog';
+import { logProductModified, logProductArchived } from '@/lib/auditLog';
 
 type Product = Database['public']['Tables']['products']['Row'];
 
@@ -154,7 +153,7 @@ export default function ProductCatalogScreen() {
     );
   };
 
-  const handleDeleteProduct = async (product: Product) => {
+  const _handleDeleteProduct = async (product: Product) => {
     Alert.alert(
       'Supprimer le produit',
       `Êtes-vous sûr de vouloir supprimer définitivement ${product.product_code}? Cette action est irréversible.`,

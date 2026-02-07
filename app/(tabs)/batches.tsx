@@ -28,6 +28,7 @@ import { Card } from '@/components/Card';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { BatchListSkeleton } from '@/components/SkeletonLoader';
+import { useToast } from '@/components/Toast';
 import type { Database } from '@/lib/database.types';
 
 type Batch = Database['public']['Tables']['batches']['Row'] & {
@@ -41,6 +42,7 @@ const ITEMS_PER_PAGE = 20;
 
 export default function BatchesScreenEnhanced() {
   const router = useRouter();
+  const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -118,10 +120,11 @@ export default function BatchesScreenEnhanced() {
         critical_deviations_count: deviationsCount[batch.id] || 0,
       })) || [];
 
-      setBatches(batchesWithDeviations as Batch[]);
-      setCachedBatches(batchesWithDeviations as Batch[]);
+      setBatches(batchesWithDeviations as unknown as Batch[]);
+      setCachedBatches(batchesWithDeviations as unknown as Batch[]);
     } catch (error) {
       console.error('Error fetching batches:', error);
+      toast.showError('Erreur de chargement', 'Impossible de charger la liste des lots');
     } finally {
       setLoading(false);
       setRefreshing(false);

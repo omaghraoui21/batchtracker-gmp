@@ -6,7 +6,7 @@
  */
 
 import React, { ReactNode } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -56,7 +56,7 @@ export function RBACGuard({ children, allowedRoles, fallback, redirectTo }: RBAC
         <Ionicons name="shield-outline" size={80} color={Colors.error} />
         <Text style={styles.title}>Accès refusé</Text>
         <Text style={styles.message}>
-          Vous n'avez pas les permissions nécessaires pour accéder à cette section.
+          {"Vous n'avez pas les permissions nécessaires pour accéder à cette section."}
         </Text>
         <Text style={styles.info}>
           Rôle requis: {allowedRoles.join(' ou ')}

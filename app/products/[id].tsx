@@ -14,13 +14,21 @@ import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
-import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
+import { Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
-import type { Database } from '@/lib/database.types';
 import * as Haptics from 'expo-haptics';
 import { logProductAdded, logProductModified } from '@/lib/auditLog';
 
-type Product = Database['public']['Tables']['products']['Row'];
+type Product = {
+  id: string;
+  product_code: string;
+  product_name: string;
+  technical_description: string | null;
+  is_active: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
+  created_by: string | null;
+};
 
 // Blue Cobalt theme
 const CobaltColors = {

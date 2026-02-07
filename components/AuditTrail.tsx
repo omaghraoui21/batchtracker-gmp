@@ -125,7 +125,7 @@ export function AuditTrail({ entityType, entityId, limit = 10 }: AuditTrailProps
   if (loading) {
     return (
       <Card style={styles.container}>
-        <Text style={styles.title}>Journal d'Audit</Text>
+        <Text style={styles.title}>{"Journal d'Audit"}</Text>
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={Colors.primary} />
         </View>
@@ -136,7 +136,7 @@ export function AuditTrail({ entityType, entityId, limit = 10 }: AuditTrailProps
   if (entries.length === 0) {
     return (
       <Card style={styles.container}>
-        <Text style={styles.title}>Journal d'Audit</Text>
+        <Text style={styles.title}>{"Journal d'Audit"}</Text>
         <View style={styles.emptyContainer}>
           <Ionicons name="document-text-outline" size={48} color={Colors.text.tertiary} />
           <Text style={styles.emptyText}>Aucune entrée dans le journal</Text>
@@ -148,7 +148,7 @@ export function AuditTrail({ entityType, entityId, limit = 10 }: AuditTrailProps
   return (
     <Card style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Journal d'Audit</Text>
+        <Text style={styles.title}>{"Journal d'Audit"}</Text>
         <View style={styles.countBadge}>
           <Text style={styles.countText}>{entries.length}</Text>
         </View>

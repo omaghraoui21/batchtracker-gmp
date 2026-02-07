@@ -26,7 +26,7 @@ export async function checkOperatorQualification(
       'Technicien': 'Équipement',
     };
 
-    const sopCategory = sopCategoryMap[stepDefinition.required_role] || 'Production';
+    const sopCategory = sopCategoryMap[stepDefinition.required_role || ''] || 'Production';
 
     // Get relevant SOPs for this category
     const { data: sops, error: sopsError } = await supabase

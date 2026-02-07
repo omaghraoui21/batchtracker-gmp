@@ -14,7 +14,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
+import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
@@ -405,8 +405,8 @@ export default function BatchReceptionScreen() {
           </View>
           <Text style={styles.infoText}>
             • En recevant ce dossier, vous devenez le détenteur actuel{'\n'}
-            • L'horodatage de la réception sera enregistré{'\n'}
-            • Un événement d'audit sera créé pour la traçabilité{'\n'}
+            {"• L'horodatage de la réception sera enregistré"}{'\n'}
+            {"• Un événement d'audit sera créé pour la traçabilité"}{'\n'}
             • Vous pourrez ensuite accéder aux détails complets du lot
           </Text>
         </Card>
@@ -429,7 +429,7 @@ export default function BatchReceptionScreen() {
             </View>
 
             <Text style={styles.modalSubtitle}>
-              Sélectionnez l'utilisateur qui recevra le lot #{batch.batch_number}
+              {"Sélectionnez l'utilisateur qui recevra le lot #"}{batch.batch_number}
             </Text>
 
             <ScrollView style={styles.transferList}>

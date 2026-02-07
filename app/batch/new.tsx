@@ -22,9 +22,10 @@ import * as Haptics from 'expo-haptics';
 import type { Database } from '@/lib/database.types';
 import { logBatchCreation, logDraftBatchCreation, logQRGeneration } from '@/lib/auditLog';
 import { assignBatchAutomatically } from '@/lib/assignmentEngine';
+import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/components/Toast';
 
 type WorkflowTemplate = Database['public']['Tables']['workflow_templates']['Row'];
-type Product = Database['public']['Tables']['products']['Row'];
 
 interface BatchFormData {
   batchNumber: string;
@@ -40,9 +41,13 @@ interface BatchFormData {
 
 export default function NewBatchScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [checkingUnique, setCheckingUnique] = useState(false);
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [showManufacturingDatePicker, setShowManufacturingDatePicker] = useState(false);
   const [showExpiryDatePicker, setShowExpiryDatePicker] = useState(false);
   const [batchNumberError, setBatchNumberError] = useState<string | null>(null);
@@ -62,12 +67,20 @@ export default function NewBatchScreen() {
   });
   const [productError, setProductError] = useState<string | null>(null);
 
+  // Derive user info from auth context with safe fallbacks
+  const userId = user?.id ?? '';
+  const userName = user?.name ?? '';
+  const userRole = user?.role ?? 'VIEWER';
+
   useEffect(() => {
     fetchWorkflowTemplates();
   }, []);
 
   const fetchWorkflowTemplates = async () => {
     try {
+      setLoadingTemplates(true);
+      setTemplatesError(null);
+
       const { data, error } = await supabase
         .from('workflow_templates')
         .select('*')
@@ -76,13 +89,19 @@ export default function NewBatchScreen() {
       if (error) throw error;
       setWorkflowTemplates(data || []);
 
-      // Set first template as default
-      if (data && data.length > 0) {
-        setFormData((prev) => ({ ...prev, workflowTemplateId: data[0].id }));
+      if (!data || data.length === 0) {
+        setTemplatesError('Aucun workflow disponible');
+        return;
       }
+
+      // Set first template as default
+      setFormData((prev) => ({ ...prev, workflowTemplateId: data[0].id }));
     } catch (error) {
       console.error('Error fetching workflow templates:', error);
-      Alert.alert('Erreur', 'Impossible de charger les modèles de workflow');
+      setTemplatesError('Impossible de charger les workflows');
+      toast.showError('Erreur', 'Impossible de charger les modeles de workflow');
+    } finally {
+      setLoadingTemplates(false);
     }
   };
 
@@ -106,7 +125,7 @@ export default function NewBatchScreen() {
       }
 
       if (data) {
-        setBatchNumberError('Ce numéro de lot existe déjà');
+        setBatchNumberError('Ce numero de lot existe deja');
         return false;
       }
 
@@ -124,39 +143,46 @@ export default function NewBatchScreen() {
     checkBatchNumberUnique(formData.batchNumber);
   };
 
-  const generateQRCodeData = (batchId: string): string => {
-    // Format: BATCH:{batch_id}
-    return `BATCH:${batchId}`;
-  };
-
   const validateForm = (): boolean => {
     if (!formData.batchNumber.trim()) {
-      Alert.alert('Erreur', 'Veuillez saisir un numéro de lot');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.showError('Champ requis', 'Veuillez saisir un numero de lot');
       return false;
     }
 
     if (!formData.productName.trim()) {
-      Alert.alert('Erreur', 'Veuillez saisir un nom de produit');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.showError('Champ requis', 'Veuillez saisir un nom de produit');
       return false;
     }
 
     if (!formData.workflowTemplateId) {
-      Alert.alert('Erreur', 'Veuillez sélectionner un modèle de workflow');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.showError('Champ requis', 'Veuillez selectionner un modele de workflow');
       return false;
     }
 
     if (!formData.assignedTo.trim()) {
-      Alert.alert('Erreur', 'Veuillez saisir le nom de l&apos;assigné');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.showError('Champ requis', 'Veuillez saisir le nom de l\'assigne');
       return false;
     }
 
     if (formData.expiryDate <= formData.manufacturingDate) {
-      Alert.alert('Erreur', 'La date d\'expiration doit être après la date de fabrication');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.showError('Date invalide', 'La date d\'expiration doit etre apres la date de fabrication');
       return false;
     }
 
     if (batchNumberError) {
-      Alert.alert('Erreur', 'Le numéro de lot n\'est pas valide');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.showError('Numero invalide', 'Le numero de lot n\'est pas valide');
+      return false;
+    }
+
+    if (!userId) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.showError('Non authentifie', 'Vous devez etre connecte pour creer un lot');
       return false;
     }
 
@@ -169,9 +195,6 @@ export default function NewBatchScreen() {
     try {
       setLoading(true);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-      // Mock user ID - in production, get from auth context
-      const mockUserId = 'user-123';
 
       let batchData;
 
@@ -191,10 +214,9 @@ export default function NewBatchScreen() {
           .single();
 
         if (updateError) {
-          Alert.alert(
+          toast.showError(
             'Erreur de finalisation',
-            `Impossible de finaliser le lot: ${updateError.message}`,
-            [{ text: 'OK' }]
+            `Impossible de finaliser le lot: ${updateError.message}`
           );
           return;
         }
@@ -204,10 +226,22 @@ export default function NewBatchScreen() {
         // Generate QR code data using the secure qr_token
         if (batchData.qr_token) {
           const qrCodeData = `BATCH:${batchData.qr_token}`;
-          await supabase
+          const { error: qrError } = await supabase
             .from('batches')
             .update({ qr_code_data: qrCodeData })
             .eq('id', batchData.id);
+
+          if (qrError) {
+            toast.showWarning(
+              'QR Code',
+              `Le lot a ete cree mais le QR code n'a pas pu etre genere: ${qrError.message}`
+            );
+          }
+        } else {
+          toast.showWarning(
+            'QR Code',
+            'Le lot a ete cree mais aucun jeton QR n\'a ete genere. Contactez un administrateur.'
+          );
         }
       } else {
         // Fallback: create batch directly (shouldn't happen with draft-first flow)
@@ -225,16 +259,15 @@ export default function NewBatchScreen() {
             priority: formData.priority,
             status: 'active',
             batch_status: 'en_cours',
-            created_by: mockUserId,
+            created_by: userId,
           })
           .select()
           .single();
 
         if (batchError) {
-          Alert.alert(
-            'Erreur de création',
-            `Impossible de créer le lot: ${batchError.message}`,
-            [{ text: 'OK' }]
+          toast.showError(
+            'Erreur de creation',
+            `Impossible de creer le lot: ${batchError.message}`
           );
           return;
         }
@@ -244,10 +277,22 @@ export default function NewBatchScreen() {
         // Generate QR code data
         if (batchData.qr_token) {
           const qrCodeData = `BATCH:${batchData.qr_token}`;
-          await supabase
+          const { error: qrError } = await supabase
             .from('batches')
             .update({ qr_code_data: qrCodeData })
             .eq('id', batchData.id);
+
+          if (qrError) {
+            toast.showWarning(
+              'QR Code',
+              `Le lot a ete cree mais le QR code n'a pas pu etre genere: ${qrError.message}`
+            );
+          }
+        } else {
+          toast.showWarning(
+            'QR Code',
+            'Le lot a ete cree mais aucun jeton QR n\'a ete genere. Contactez un administrateur.'
+          );
         }
       }
 
@@ -286,38 +331,68 @@ export default function NewBatchScreen() {
 
           // Phase 10: Try automatic assignment for first step
           const firstStepDef = stepDefinitions[0];
-          const assignmentResult = await assignBatchAutomatically(
-            batchData.id,
-            firstStepDef.id,
-            mockUserId,
-            'Admin User',
-            'ADMIN'
-          );
+          try {
+            const assignmentResult = await assignBatchAutomatically(
+              batchData.id,
+              firstStepDef.id,
+              userId,
+              userName,
+              userRole
+            );
 
-          if (!assignmentResult.success && assignmentResult.reason) {
-            // Show info that no automatic assignment was possible
-            console.log('No automatic assignment:', assignmentResult.reason);
+            if (!assignmentResult.success) {
+              // Mark as needing manual assignment instead of failing silently
+              await supabase
+                .from('batches')
+                .update({ assigned_to: formData.assignedTo || '\u00C0 ASSIGNER' })
+                .eq('id', batchData.id);
+
+              if (assignmentResult.reason) {
+                toast.showInfo(
+                  'Assignation manuelle requise',
+                  assignmentResult.reason
+                );
+              }
+            }
+          } catch (assignError) {
+            console.error('Auto-assignment error:', assignError);
+            // Mark as needing manual assignment
+            await supabase
+              .from('batches')
+              .update({ assigned_to: formData.assignedTo || '\u00C0 ASSIGNER' })
+              .eq('id', batchData.id);
+
+            toast.showWarning(
+              'Assignation automatique echouee',
+              'Le lot a ete marque comme "\u00C0 ASSIGNER". Veuillez assigner manuellement.'
+            );
           }
         }
       }
 
       // Log batch creation for audit trail
-      await logBatchCreation(
-        batchData.id,
-        batchData.batch_number,
-        mockUserId,
-        'Admin User', // In production, get from auth context
-        'ADMIN',
-        batchData.product_name
-      );
+      try {
+        await logBatchCreation(
+          batchData.id,
+          batchData.batch_number,
+          userId,
+          userName,
+          userRole,
+          batchData.product_name
+        );
+      } catch (auditError) {
+        console.error('Audit log error (non-blocking):', auditError);
+      }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      toast.showSuccess('Lot cree', `Le lot ${batchData.batch_number} a ete cree avec succes`);
 
       // Automatically redirect to newly created batch details
       router.replace(`/batch/${batchData.id}`);
     } catch (error) {
       console.error('Error creating batch:', error);
-      Alert.alert('Erreur', 'Impossible de créer le lot');
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.showError('Erreur', 'Impossible de creer le lot. Veuillez reessayer.');
     } finally {
       setLoading(false);
     }
@@ -327,27 +402,37 @@ export default function NewBatchScreen() {
     if (currentStep === 1) {
       // Validate Step 1: Identification
       if (!formData.batchNumber.trim()) {
-        Alert.alert('Erreur', 'Veuillez saisir un numéro de lot');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        toast.showError('Champ requis', 'Veuillez saisir un numero de lot');
         return;
       }
       if (batchNumberError) {
-        Alert.alert('Erreur', 'Le numéro de lot n\'est pas valide');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        toast.showError('Numero invalide', 'Le numero de lot n\'est pas valide');
         return;
       }
       if (!formData.productId || !formData.productName.trim()) {
-        setProductError('Veuillez sélectionner un produit');
-        Alert.alert('Erreur', 'Veuillez sélectionner un produit dans le catalogue');
+        setProductError('Veuillez selectionner un produit');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        toast.showError('Champ requis', 'Veuillez selectionner un produit dans le catalogue');
         return;
       }
       if (!formData.workflowTemplateId) {
-        Alert.alert('Erreur', 'Veuillez sélectionner un modèle de workflow');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        toast.showError('Champ requis', 'Veuillez selectionner un modele de workflow');
+        return;
+      }
+      if (!userId) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        toast.showError('Non authentifie', 'Vous devez etre connecte pour creer un lot');
         return;
       }
 
       // Final check for uniqueness before proceeding
       const isUnique = await checkBatchNumberUnique(formData.batchNumber);
       if (!isUnique) {
-        Alert.alert('Erreur', 'Ce numéro de lot existe déjà');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        toast.showError('Doublon', 'Ce numero de lot existe deja');
         return;
       }
 
@@ -355,7 +440,6 @@ export default function NewBatchScreen() {
       if (!draftBatchId) {
         try {
           setLoading(true);
-          const mockUserId = 'user-123';
 
           const { data: draftBatch, error: draftError } = await supabase
             .from('batches')
@@ -367,49 +451,70 @@ export default function NewBatchScreen() {
               workflow_template_id: formData.workflowTemplateId,
               batch_status: 'brouillon', // Draft status
               status: 'active',
-              created_by: mockUserId,
+              created_by: userId,
             })
             .select()
             .single();
 
           if (draftError) {
-            // Show detailed error message
-            Alert.alert(
-              'Erreur de création',
-              `Impossible de créer le brouillon: ${draftError.message}`,
-              [{ text: 'OK' }]
+            // Show detailed error message but do NOT advance the step
+            toast.showError(
+              'Erreur de creation',
+              `Impossible de creer le brouillon: ${draftError.message}`
             );
+            // Form stays on step 1 - user can retry
             return;
           }
 
           setDraftBatchId(draftBatch.id);
 
           // Log draft creation
-          await logDraftBatchCreation(
-            draftBatch.id,
-            draftBatch.batch_number,
-            mockUserId,
-            'Admin User',
-            'ADMIN',
-            draftBatch.product_name
-          );
+          try {
+            await logDraftBatchCreation(
+              draftBatch.id,
+              draftBatch.batch_number,
+              userId,
+              userName,
+              userRole,
+              draftBatch.product_name
+            );
+          } catch (auditError) {
+            console.error('Draft audit log error (non-blocking):', auditError);
+          }
 
           // Log QR generation
           if (draftBatch.qr_token) {
-            await logQRGeneration(
-              draftBatch.id,
-              draftBatch.batch_number,
-              mockUserId,
-              'Admin User',
-              'ADMIN',
-              draftBatch.qr_token
+            try {
+              await logQRGeneration(
+                draftBatch.id,
+                draftBatch.batch_number,
+                userId,
+                userName,
+                userRole,
+                draftBatch.qr_token
+              );
+            } catch (qrLogError) {
+              console.error('QR audit log error (non-blocking):', qrLogError);
+              toast.showWarning(
+                'QR Code',
+                'Le jeton QR a ete genere mais la trace d\'audit n\'a pas pu etre enregistree.'
+              );
+            }
+          } else {
+            // QR token was not generated by the database trigger/default
+            toast.showWarning(
+              'QR Code',
+              'Aucun jeton QR genere pour ce brouillon. Le QR sera genere a la finalisation.'
             );
           }
 
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          toast.showSuccess('Brouillon sauvegarde', `Le brouillon ${draftBatch.batch_number} a ete cree`);
         } catch (error) {
           console.error('Error creating draft:', error);
-          Alert.alert('Erreur', 'Impossible de sauvegarder le brouillon');
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          toast.showError('Erreur', 'Impossible de sauvegarder le brouillon. Veuillez reessayer.');
+          // Form stays on step 1 - user can retry without losing data
           return;
         } finally {
           setLoading(false);
@@ -420,7 +525,8 @@ export default function NewBatchScreen() {
     if (currentStep === 2) {
       // Validate Step 2: Dates
       if (formData.expiryDate <= formData.manufacturingDate) {
-        Alert.alert('Erreur', 'La date d\'expiration doit être après la date de fabrication');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        toast.showError('Date invalide', 'La date d\'expiration doit etre apres la date de fabrication');
         return;
       }
 
@@ -428,15 +534,26 @@ export default function NewBatchScreen() {
       if (draftBatchId) {
         try {
           setLoading(true);
-          await supabase
+          const { error: dateUpdateError } = await supabase
             .from('batches')
             .update({
               manufacturing_date: formData.manufacturingDate.toISOString(),
               expiry_date: formData.expiryDate.toISOString(),
             })
             .eq('id', draftBatchId);
+
+          if (dateUpdateError) {
+            toast.showWarning(
+              'Sauvegarde partielle',
+              'Les dates n\'ont pas pu etre sauvegardees dans le brouillon.'
+            );
+          }
         } catch (error) {
           console.error('Error updating draft dates:', error);
+          toast.showWarning(
+            'Sauvegarde partielle',
+            'Les dates n\'ont pas pu etre sauvegardees dans le brouillon.'
+          );
         } finally {
           setLoading(false);
         }
@@ -465,7 +582,7 @@ export default function NewBatchScreen() {
       case 'packaging':
         return 'Conditionnement';
       case 'quality':
-        return 'Qualité';
+        return 'Qualite';
       case 'research':
         return 'Recherche';
       default:
@@ -489,9 +606,9 @@ export default function NewBatchScreen() {
       // Draft exists, confirm cancellation
       Alert.alert(
         'Quitter le formulaire',
-        'Un brouillon a été sauvegardé. Voulez-vous revenir à la liste des lots?',
+        'Un brouillon a ete sauvegarde. Voulez-vous revenir a la liste des lots?',
         [
-          { text: 'Continuer l\'édition', style: 'cancel' },
+          { text: 'Continuer l\'edition', style: 'cancel' },
           {
             text: 'Quitter',
             onPress: () => router.push('/(tabs)/batches'),
@@ -586,11 +703,11 @@ export default function NewBatchScreen() {
         {currentStep === 1 && (
           <Card style={styles.formCard}>
             <Text style={styles.stepTitle}>Informations de Base</Text>
-            <Text style={styles.stepSubtitle}>Définissez les informations principales du lot</Text>
+            <Text style={styles.stepSubtitle}>Definissez les informations principales du lot</Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>
-                Numéro de Lot <Text style={styles.required}>*</Text>
+                Numero de Lot <Text style={styles.required}>*</Text>
               </Text>
               <View style={styles.inputContainer}>
                 <TextInput
@@ -686,37 +803,59 @@ export default function NewBatchScreen() {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Workflow</Text>
-              <View style={styles.pickerContainer}>
-                {workflowTemplates.map((template) => (
+              {loadingTemplates ? (
+                <View style={styles.templatesLoading}>
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <Text style={styles.templatesLoadingText}>Chargement des workflows...</Text>
+                </View>
+              ) : templatesError && workflowTemplates.length === 0 ? (
+                <View style={styles.templatesEmpty}>
+                  <Ionicons name="alert-circle-outline" size={24} color={Colors.warning} />
+                  <Text style={styles.templatesEmptyTitle}>{templatesError}</Text>
+                  <Text style={styles.templatesEmptyText}>
+                    Aucun modele de workflow actif n&apos;a ete trouve. Veuillez contacter un administrateur pour configurer les workflows avant de creer un lot.
+                  </Text>
                   <TouchableOpacity
-                    key={template.id}
-                    style={[
-                      styles.pickerOption,
-                      formData.workflowTemplateId === template.id && styles.pickerOptionActive,
-                    ]}
-                    onPress={() => setFormData({ ...formData, workflowTemplateId: template.id })}
-                    disabled={loading}
+                    style={styles.retryButton}
+                    onPress={fetchWorkflowTemplates}
                   >
-                    <View style={styles.pickerOptionContent}>
-                      <Text
-                        style={[
-                          styles.pickerOptionText,
-                          formData.workflowTemplateId === template.id &&
-                            styles.pickerOptionTextActive,
-                        ]}
-                      >
-                        {template.name}
-                      </Text>
-                      {template.description && (
-                        <Text style={styles.pickerOptionDescription}>{template.description}</Text>
-                      )}
-                    </View>
-                    {formData.workflowTemplateId === template.id && (
-                      <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
-                    )}
+                    <Ionicons name="refresh" size={16} color={Colors.primary} />
+                    <Text style={styles.retryButtonText}>Reessayer</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
+                </View>
+              ) : (
+                <View style={styles.pickerContainer}>
+                  {workflowTemplates.map((template) => (
+                    <TouchableOpacity
+                      key={template.id}
+                      style={[
+                        styles.pickerOption,
+                        formData.workflowTemplateId === template.id && styles.pickerOptionActive,
+                      ]}
+                      onPress={() => setFormData({ ...formData, workflowTemplateId: template.id })}
+                      disabled={loading}
+                    >
+                      <View style={styles.pickerOptionContent}>
+                        <Text
+                          style={[
+                            styles.pickerOptionText,
+                            formData.workflowTemplateId === template.id &&
+                              styles.pickerOptionTextActive,
+                          ]}
+                        >
+                          {template.name}
+                        </Text>
+                        {template.description && (
+                          <Text style={styles.pickerOptionDescription}>{template.description}</Text>
+                        )}
+                      </View>
+                      {formData.workflowTemplateId === template.id && (
+                        <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           </Card>
         )}
@@ -726,7 +865,7 @@ export default function NewBatchScreen() {
           <Card style={styles.formCard}>
             <Text style={styles.stepTitle}>Dates</Text>
             <Text style={styles.stepSubtitle}>
-              Définissez les dates de fabrication et d&apos;expiration
+              Definissez les dates de fabrication et d&apos;expiration
             </Text>
 
             <View style={styles.formGroup}>
@@ -783,7 +922,7 @@ export default function NewBatchScreen() {
             <View style={styles.infoBox}>
               <Ionicons name="information-circle-outline" size={20} color={Colors.primary} />
               <Text style={styles.infoText}>
-                La durée de vie du lot sera de{' '}
+                La duree de vie du lot sera de{' '}
                 {Math.round(
                   (formData.expiryDate.getTime() - formData.manufacturingDate.getTime()) /
                     (1000 * 60 * 60 * 24)
@@ -798,24 +937,24 @@ export default function NewBatchScreen() {
         {currentStep === 3 && (
           <Card style={styles.formCard}>
             <Text style={styles.stepTitle}>Assignation</Text>
-            <Text style={styles.stepSubtitle}>Définissez l&apos;assigné et la priorité du lot</Text>
+            <Text style={styles.stepSubtitle}>Definissez l&apos;assigne et la priorite du lot</Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>
-                Assigné à <Text style={styles.required}>*</Text>
+                Assigne a <Text style={styles.required}>*</Text>
               </Text>
               <TextInput
                 style={styles.input}
                 value={formData.assignedTo}
                 onChangeText={(text) => setFormData({ ...formData, assignedTo: text })}
-                placeholder="Nom de l&apos;opérateur"
+                placeholder="Nom de l&apos;operateur"
                 placeholderTextColor={Colors.text.tertiary}
                 editable={!loading}
               />
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Priorité</Text>
+              <Text style={styles.label}>Priorite</Text>
               <View style={styles.priorityGroup}>
                 {(['high', 'normal', 'low'] as const).map((priority) => (
                   <TouchableOpacity
@@ -855,7 +994,7 @@ export default function NewBatchScreen() {
                       ]}
                     >
                       {priority === 'high'
-                        ? 'Élevée'
+                        ? 'Elevee'
                         : priority === 'low'
                         ? 'Basse'
                         : 'Normale'}
@@ -867,9 +1006,9 @@ export default function NewBatchScreen() {
 
             {/* Summary */}
             <View style={styles.summaryBox}>
-              <Text style={styles.summaryTitle}>Récapitulatif</Text>
+              <Text style={styles.summaryTitle}>Recapitulatif</Text>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Numéro de lot:</Text>
+                <Text style={styles.summaryLabel}>Numero de lot:</Text>
                 <Text style={styles.summaryValue}>{formData.batchNumber}</Text>
               </View>
               <View style={styles.summaryRow}>
@@ -889,8 +1028,12 @@ export default function NewBatchScreen() {
                 <Text style={styles.summaryValue}>{formatDate(formData.expiryDate)}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Assigné à:</Text>
+                <Text style={styles.summaryLabel}>Assigne a:</Text>
                 <Text style={styles.summaryValue}>{formData.assignedTo}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Cree par:</Text>
+                <Text style={styles.summaryValue}>{userName || 'N/A'}</Text>
               </View>
             </View>
           </Card>
@@ -900,7 +1043,7 @@ export default function NewBatchScreen() {
         <View style={styles.navigationButtons}>
           {currentStep > 1 && (
             <Button
-              title="Précédent"
+              title="Precedent"
               onPress={prevStep}
               variant="outline"
               style={styles.navButton}
@@ -912,11 +1055,11 @@ export default function NewBatchScreen() {
               title="Suivant"
               onPress={nextStep}
               style={styles.navButton}
-              disabled={loading || checkingUnique}
+              disabled={loading || checkingUnique || (currentStep === 1 && loadingTemplates)}
             />
           ) : (
             <Button
-              title="Créer le Lot"
+              title="Creer le Lot"
               onPress={handleSubmit}
               loading={loading}
               style={styles.navButton}
@@ -1208,5 +1351,54 @@ const styles = StyleSheet.create({
   },
   navButton: {
     flex: 1,
+  },
+  templatesLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.lg,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.sm,
+    justifyContent: 'center',
+  },
+  templatesLoadingText: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+  },
+  templatesEmpty: {
+    alignItems: 'center',
+    padding: Spacing.lg,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.warning + '40',
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.sm,
+  },
+  templatesEmptyTitle: {
+    ...Typography.body,
+    fontWeight: '600',
+    color: Colors.warning,
+  },
+  templatesEmptyText: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.primary + '10',
+    borderRadius: BorderRadius.sm,
+    marginTop: Spacing.xs,
+  },
+  retryButtonText: {
+    ...Typography.caption,
+    color: Colors.primary,
+    fontWeight: '600',
   },
 });

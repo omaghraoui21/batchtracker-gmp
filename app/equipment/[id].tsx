@@ -56,7 +56,7 @@ export default function EquipmentDetailScreen() {
         .order('used_at', { ascending: false })
         .limit(20);
 
-      setLogbook(logbookData || []);
+      setLogbook((logbookData as unknown as EquipmentLogbook[]) || []);
 
       // Fetch maintenance records
       const { data: maintenanceData } = await supabase
@@ -253,7 +253,7 @@ export default function EquipmentDetailScreen() {
         {/* Logbook */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            Journal d'Utilisation ({logbook.length} entrées)
+            {"Journal d'Utilisation"} ({logbook.length} entrées)
           </Text>
           {logbook.length === 0 ? (
             <Card>

@@ -1099,4 +1099,13 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     textAlign: 'center',
   },
+  section: {
+    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+  },
+  sectionTitle: {
+    ...Typography.h3,
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
 });

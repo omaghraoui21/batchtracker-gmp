@@ -86,7 +86,7 @@ export default function WorkflowConfigScreen() {
   const handleEditStep = (step: StepDefinition) => {
     setEditingStep(step);
     setStepName(step.name);
-    setStepRole(step.required_role);
+    setStepRole(step.required_role || '');
     setStepSLA(step.sla_hours.toString());
     setModalVisible(true);
   };

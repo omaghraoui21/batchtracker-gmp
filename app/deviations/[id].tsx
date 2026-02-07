@@ -62,7 +62,7 @@ export default function DeviationDetailScreen() {
 
       if (error) throw error;
 
-      const deviationData = data as Deviation;
+      const deviationData = data as unknown as Deviation;
       setDeviation(deviationData);
       setRootCauseAnalysis(deviationData.root_cause_analysis || '');
       setCorrectiveActions(deviationData.corrective_actions || '');

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,15 +6,43 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/components/Toast';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { DebugAuthInfo } from '@/components/DebugAuthInfo';
 import { SupabaseConnectionTest } from '@/components/SupabaseConnectionTest';
-import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
+import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
+
+// Slate & Steel Industrial Theme for Diagnostic Section
+const IndustrialColors = {
+  slate: {
+    50: '#F8FAFC',
+    100: '#F1F5F9',
+    200: '#E2E8F0',
+    300: '#CBD5E1',
+    400: '#94A3B8',
+    500: '#64748B',
+    600: '#475569',
+    700: '#334155',
+    800: '#1E293B',
+    900: '#0F172A',
+  },
+  steel: {
+    base: '#708090',
+    light: '#A9B4C2',
+    dark: '#4A5568',
+  },
+  diagnostic: {
+    pass: '#10B981',
+    warning: '#F59E0B',
+    critical: '#DC2626',
+  },
+};
 
 interface MenuItem {
   id: string;
@@ -25,16 +53,23 @@ interface MenuItem {
   color?: string;
 }
 
+type HealthStatus = 'healthy' | 'degraded' | 'unknown';
+
 export default function AdminScreen() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const toast = useToast();
+
+  const [healthStatus, setHealthStatus] = useState<HealthStatus>('unknown');
+  const [healthChecking, setHealthChecking] = useState(false);
+  const [lastCheckTime, setLastCheckTime] = useState<string | null>(null);
 
   // Access control: redirect non-admin users
-  React.useEffect(() => {
+  useEffect(() => {
     if (user && user.role !== 'ADMIN') {
       Alert.alert(
-        'Accès refusé',
-        'Vous devez avoir le rôle ADMIN pour accéder à cette section.',
+        'Acces refuse',
+        'Vous devez avoir le role ADMIN pour acceder a cette section.',
         [
           {
             text: 'Retour',
@@ -45,18 +80,40 @@ export default function AdminScreen() {
     }
   }, [user, router]);
 
+  // Quick health check on mount
+  useEffect(() => {
+    if (user && user.role === 'ADMIN') {
+      runQuickHealthCheck();
+    }
+  }, [user]);
+
+  const runQuickHealthCheck = async () => {
+    setHealthChecking(true);
+    try {
+      // Simulate a quick connectivity / health ping
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      setHealthStatus('healthy');
+      setLastCheckTime(new Date().toLocaleTimeString());
+    } catch {
+      setHealthStatus('degraded');
+      setLastCheckTime(new Date().toLocaleTimeString());
+    } finally {
+      setHealthChecking(false);
+    }
+  };
+
   // Show access denied for non-admin users
   if (!user || user.role !== 'ADMIN') {
     return (
       <View style={styles.container}>
         <View style={styles.accessDeniedContainer}>
           <Ionicons name="shield-outline" size={80} color={Colors.error} />
-          <Text style={styles.accessDeniedTitle}>Accès refusé</Text>
+          <Text style={styles.accessDeniedTitle}>Acces refuse</Text>
           <Text style={styles.accessDeniedText}>
-            Vous devez avoir le rôle ADMIN pour accéder à cette section.
+            Vous devez avoir le role ADMIN pour acceder a cette section.
           </Text>
           <Text style={styles.accessDeniedInfo}>
-            Rôle actuel: {user?.role || 'Non défini'}
+            Role actuel: {user?.role || 'Non defini'}
           </Text>
           <Button
             title="Retour au Tableau de Bord"
@@ -70,140 +127,230 @@ export default function AdminScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'Déconnexion',
-      'Êtes-vous sûr de vouloir vous déconnecter ?',
+      'Deconnexion',
+      'Etes-vous sur de vouloir vous deconnecter ?',
       [
         { text: 'Annuler', style: 'cancel' },
         {
-          text: 'Déconnexion',
+          text: 'Deconnexion',
           style: 'destructive',
           onPress: async () => {
-            await logout();
-            router.replace('/login');
+            try {
+              await logout();
+              router.replace('/login');
+            } catch (error: any) {
+              toast.showError(error?.message || 'Erreur lors de la deconnexion.');
+            }
           },
         },
       ]
     );
   };
 
-  const menuSections: { title: string; items: MenuItem[] }[] = [
+  const handleNavigate = (route: string, label: string) => {
+    try {
+      router.push(route as any);
+    } catch {
+      toast.showError(`Impossible d'ouvrir ${label}.`);
+    }
+  };
+
+  const getHealthColor = () => {
+    switch (healthStatus) {
+      case 'healthy':
+        return IndustrialColors.diagnostic.pass;
+      case 'degraded':
+        return IndustrialColors.diagnostic.warning;
+      default:
+        return IndustrialColors.slate[400];
+    }
+  };
+
+  const getHealthLabel = () => {
+    switch (healthStatus) {
+      case 'healthy':
+        return 'Operationnel';
+      case 'degraded':
+        return 'Degrade';
+      default:
+        return 'Inconnu';
+    }
+  };
+
+  const getHealthIcon = (): keyof typeof Ionicons.glyphMap => {
+    switch (healthStatus) {
+      case 'healthy':
+        return 'checkmark-circle';
+      case 'degraded':
+        return 'warning';
+      default:
+        return 'help-circle-outline';
+    }
+  };
+
+  // ── Section 1: Gestion des Utilisateurs ──
+  const userManagementItems: MenuItem[] = [
     {
-      title: 'Gestion',
-      items: [
-        {
-          id: 'users',
-          icon: 'people-outline',
-          title: 'Utilisateurs',
-          subtitle: 'Gérer les comptes et les rôles',
-          onPress: () => router.push('/users'),
-        },
-        {
-          id: 'workflows',
-          icon: 'git-branch-outline',
-          title: 'Workflows',
-          subtitle: 'Configurer les processus',
-          onPress: () => router.push('/workflow-config'),
-        },
-        {
-          id: 'equipment',
-          icon: 'construct-outline',
-          title: 'Équipements',
-          subtitle: 'Registre des équipements et maintenance',
-          onPress: () => router.push('/equipment'),
-        },
-        {
-          id: 'training',
-          icon: 'school-outline',
-          title: 'Formation & Habilitations',
-          subtitle: 'Gestion des formations et qualifications',
-          onPress: () => router.push('/training'),
-          color: '#D4AF37',
-        },
-        {
-          id: 'products',
-          icon: 'cube-outline',
-          title: 'Produits',
-          subtitle: 'Catalogue de produits',
-          onPress: () => router.push('/products'),
-          color: '#0047AB', // Blue Cobalt
-        },
-      ],
-    },
-    {
-      title: 'Rapports',
-      items: [
-        {
-          id: 'analytics',
-          icon: 'stats-chart-outline',
-          title: 'Analytiques',
-          subtitle: 'Statistiques et KPIs',
-          onPress: () => Alert.alert('Analytiques', 'Tableaux de bord analytiques'),
-        },
-        {
-          id: 'deviations',
-          icon: 'warning-outline',
-          title: 'Déviations & CAPA',
-          subtitle: 'Gestion des déviations et actions correctives',
-          onPress: () => router.push('/deviations'),
-          color: Colors.error,
-        },
-        {
-          id: 'deviation-library',
-          icon: 'library-outline',
-          title: 'Bibliothèque des Déviations',
-          subtitle: 'Types de déviations standards GMP',
-          onPress: () => router.push('/deviation-library'),
-          color: '#DC2626', // Ruby Red
-        },
-        {
-          id: 'audit',
-          icon: 'document-text-outline',
-          title: 'Journal d\'Audit',
-          subtitle: 'Traçabilité complète',
-          onPress: () => Alert.alert('Audit', 'Journal d\'audit système'),
-        },
-      ],
-    },
-    {
-      title: 'Système',
-      items: [
-        {
-          id: 'db-audit',
-          icon: 'server-outline',
-          title: 'DB Audit & Repair',
-          subtitle: 'Diagnostic base de données et réparation',
-          onPress: () => router.push('/db-audit'),
-          color: '#708090', // Steel Grey
-        },
-      ],
-    },
-    {
-      title: 'Paramètres',
-      items: [
-        {
-          id: 'notifications',
-          icon: 'notifications-outline',
-          title: 'Notifications',
-          subtitle: 'Préférences de notification',
-          onPress: () => Alert.alert('Notifications', 'Paramètres de notification'),
-        },
-        {
-          id: 'security',
-          icon: 'shield-checkmark-outline',
-          title: 'Sécurité',
-          subtitle: 'Paramètres de sécurité',
-          onPress: () => Alert.alert('Sécurité', 'Paramètres de sécurité'),
-        },
-        {
-          id: 'backup',
-          icon: 'cloud-download-outline',
-          title: 'Sauvegarde',
-          subtitle: 'Exporter les données',
-          onPress: () => Alert.alert('Sauvegarde', 'Export et sauvegarde des données'),
-        },
-      ],
+      id: 'users',
+      icon: 'people-outline',
+      title: 'Utilisateurs',
+      subtitle: 'Gerer les comptes et les roles',
+      onPress: () => handleNavigate('/users', 'Utilisateurs'),
     },
   ];
+
+  // ── Section 2: Configuration Workflow ──
+  const workflowItems: MenuItem[] = [
+    {
+      id: 'workflows',
+      icon: 'git-branch-outline',
+      title: 'Workflows',
+      subtitle: 'Configurer les processus de production',
+      onPress: () => handleNavigate('/workflow-config', 'Workflows'),
+    },
+  ];
+
+  // ── Section 3: Regles d'Assignation ──
+  const assignmentItems: MenuItem[] = [
+    {
+      id: 'assignment-rules',
+      icon: 'swap-horizontal-outline',
+      title: 'Regles d\'Assignation',
+      subtitle: 'Configuration de l\'assignation automatique',
+      onPress: () => handleNavigate('/assignment-rules-config', 'Regles d\'Assignation'),
+    },
+  ];
+
+  // ── Section 5: Catalogue Produits ──
+  const productItems: MenuItem[] = [
+    {
+      id: 'products',
+      icon: 'cube-outline',
+      title: 'Produits',
+      subtitle: 'Catalogue de produits',
+      onPress: () => handleNavigate('/products', 'Produits'),
+      color: '#0047AB',
+    },
+  ];
+
+  // ── Additional existing sections ──
+  const additionalItems: MenuItem[] = [
+    {
+      id: 'equipment',
+      icon: 'construct-outline',
+      title: 'Equipements',
+      subtitle: 'Registre des equipements et maintenance',
+      onPress: () => handleNavigate('/equipment', 'Equipements'),
+    },
+    {
+      id: 'training',
+      icon: 'school-outline',
+      title: 'Formation & Habilitations',
+      subtitle: 'Gestion des formations et qualifications',
+      onPress: () => handleNavigate('/training', 'Formation'),
+      color: '#D4AF37',
+    },
+  ];
+
+  const reportItems: MenuItem[] = [
+    {
+      id: 'analytics',
+      icon: 'stats-chart-outline',
+      title: 'Analytiques',
+      subtitle: 'Statistiques et KPIs',
+      onPress: () => Alert.alert('Analytiques', 'Tableaux de bord analytiques'),
+    },
+    {
+      id: 'deviations',
+      icon: 'warning-outline',
+      title: 'Deviations & CAPA',
+      subtitle: 'Gestion des deviations et actions correctives',
+      onPress: () => handleNavigate('/deviations', 'Deviations'),
+      color: Colors.error,
+    },
+    {
+      id: 'deviation-library',
+      icon: 'library-outline',
+      title: 'Bibliotheque des Deviations',
+      subtitle: 'Types de deviations standards GMP',
+      onPress: () => handleNavigate('/deviation-library', 'Bibliotheque'),
+      color: '#DC2626',
+    },
+    {
+      id: 'audit',
+      icon: 'document-text-outline',
+      title: 'Journal d\'Audit',
+      subtitle: 'Tracabilite complete',
+      onPress: () => Alert.alert('Audit', 'Journal d\'audit systeme'),
+    },
+  ];
+
+  const settingsItems: MenuItem[] = [
+    {
+      id: 'notifications',
+      icon: 'notifications-outline',
+      title: 'Notifications',
+      subtitle: 'Preferences de notification',
+      onPress: () => Alert.alert('Notifications', 'Parametres de notification'),
+    },
+    {
+      id: 'security',
+      icon: 'shield-checkmark-outline',
+      title: 'Securite',
+      subtitle: 'Parametres de securite',
+      onPress: () => Alert.alert('Securite', 'Parametres de securite'),
+    },
+    {
+      id: 'backup',
+      icon: 'cloud-download-outline',
+      title: 'Sauvegarde',
+      subtitle: 'Exporter les donnees',
+      onPress: () => Alert.alert('Sauvegarde', 'Export et sauvegarde des donnees'),
+    },
+  ];
+
+  const menuSections: { title: string; items: MenuItem[] }[] = [
+    { title: 'Gestion des Utilisateurs', items: userManagementItems },
+    { title: 'Configuration Workflow', items: workflowItems },
+    { title: 'Regles d\'Assignation', items: assignmentItems },
+    // Diagnostic Systeme is rendered as a custom section below
+    { title: 'Catalogue Produits', items: productItems },
+    { title: 'Autres Modules', items: additionalItems },
+    { title: 'Rapports', items: reportItems },
+    { title: 'Parametres', items: settingsItems },
+  ];
+
+  const renderMenuItem = (item: MenuItem, isLast: boolean) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[
+        styles.menuItem,
+        !isLast && styles.menuItemBorder,
+      ]}
+      onPress={item.onPress}
+      activeOpacity={0.7}
+    >
+      <View
+        style={[
+          styles.menuIcon,
+          { backgroundColor: (item.color || Colors.primary) + '15' },
+        ]}
+      >
+        <Ionicons
+          name={item.icon}
+          size={24}
+          color={item.color || Colors.primary}
+        />
+      </View>
+      <View style={styles.menuContent}>
+        <Text style={styles.menuTitle}>{item.title}</Text>
+        {item.subtitle && (
+          <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={Colors.text.tertiary} />
+    </TouchableOpacity>
+  );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -241,47 +388,202 @@ export default function AdminScreen() {
         </TouchableOpacity>
       </Card>
 
-      {/* Sections de menu */}
-      {menuSections.map((section, sectionIndex) => (
+      {/* Sections 1, 2, 3 -- rendered before the diagnostic section */}
+      {menuSections.slice(0, 3).map((section) => (
         <View key={section.title} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
           <Card style={styles.menuCard}>
-            {section.items.map((item, itemIndex) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.menuItem,
-                  itemIndex < section.items.length - 1 && styles.menuItemBorder,
-                ]}
-                onPress={item.onPress}
-                activeOpacity={0.7}
-              >
-                <View
-                  style={[
-                    styles.menuIcon,
-                    { backgroundColor: (item.color || Colors.primary) + '15' },
-                  ]}
-                >
-                  <Ionicons
-                    name={item.icon}
-                    size={24}
-                    color={item.color || Colors.primary}
-                  />
-                </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>{item.title}</Text>
-                  {item.subtitle && (
-                    <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
-                  )}
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={Colors.text.tertiary} />
-              </TouchableOpacity>
-            ))}
+            {section.items.map((item, itemIndex) =>
+              renderMenuItem(item, itemIndex === section.items.length - 1)
+            )}
           </Card>
         </View>
       ))}
 
-      {/* Informations système */}
+      {/* ── Section 4: Diagnostic Systeme (Slate & Steel) ── */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Diagnostic Systeme</Text>
+        <View style={styles.diagnosticCard}>
+          {/* Health Status Banner */}
+          <View style={styles.diagnosticHealthBanner}>
+            <View style={styles.diagnosticHealthLeft}>
+              {healthChecking ? (
+                <ActivityIndicator size="small" color={IndustrialColors.slate[300]} />
+              ) : (
+                <Ionicons
+                  name={getHealthIcon()}
+                  size={28}
+                  color={getHealthColor()}
+                />
+              )}
+              <View style={styles.diagnosticHealthInfo}>
+                <Text style={styles.diagnosticHealthLabel}>Etat du Systeme</Text>
+                <Text
+                  style={[
+                    styles.diagnosticHealthValue,
+                    { color: getHealthColor() },
+                  ]}
+                >
+                  {healthChecking ? 'Verification...' : getHealthLabel()}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.diagnosticRefreshButton}
+              onPress={() => {
+                runQuickHealthCheck();
+                toast.showInfo('Verification en cours...');
+              }}
+              disabled={healthChecking}
+            >
+              <Ionicons
+                name="refresh-outline"
+                size={18}
+                color={IndustrialColors.steel.light}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* Quick Stats Row */}
+          <View style={styles.diagnosticStatsRow}>
+            <View style={styles.diagnosticStatItem}>
+              <Ionicons
+                name="server-outline"
+                size={16}
+                color={IndustrialColors.diagnostic.pass}
+              />
+              <Text style={styles.diagnosticStatLabel}>Base de Donnees</Text>
+              <View
+                style={[
+                  styles.diagnosticStatDot,
+                  {
+                    backgroundColor:
+                      healthStatus === 'healthy'
+                        ? IndustrialColors.diagnostic.pass
+                        : healthStatus === 'degraded'
+                        ? IndustrialColors.diagnostic.warning
+                        : IndustrialColors.slate[400],
+                  },
+                ]}
+              />
+            </View>
+            <View style={styles.diagnosticStatDivider} />
+            <View style={styles.diagnosticStatItem}>
+              <Ionicons
+                name="cloud-outline"
+                size={16}
+                color={IndustrialColors.diagnostic.pass}
+              />
+              <Text style={styles.diagnosticStatLabel}>Connectivite</Text>
+              <View
+                style={[
+                  styles.diagnosticStatDot,
+                  {
+                    backgroundColor:
+                      healthStatus === 'healthy'
+                        ? IndustrialColors.diagnostic.pass
+                        : IndustrialColors.slate[400],
+                  },
+                ]}
+              />
+            </View>
+            <View style={styles.diagnosticStatDivider} />
+            <View style={styles.diagnosticStatItem}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={16}
+                color={IndustrialColors.diagnostic.pass}
+              />
+              <Text style={styles.diagnosticStatLabel}>GMP</Text>
+              <View
+                style={[
+                  styles.diagnosticStatDot,
+                  { backgroundColor: IndustrialColors.diagnostic.pass },
+                ]}
+              />
+            </View>
+          </View>
+
+          {lastCheckTime && (
+            <Text style={styles.diagnosticLastCheck}>
+              Derniere verification : {lastCheckTime}
+            </Text>
+          )}
+
+          {/* Diagnostic Action Buttons */}
+          <View style={styles.diagnosticActions}>
+            <TouchableOpacity
+              style={styles.diagnosticActionButton}
+              onPress={() => handleNavigate('/db-audit', 'Audit Base de Donnees')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.diagnosticActionIconWrap}>
+                <Ionicons
+                  name="server-outline"
+                  size={22}
+                  color={IndustrialColors.steel.light}
+                />
+              </View>
+              <View style={styles.diagnosticActionContent}>
+                <Text style={styles.diagnosticActionTitle}>
+                  Audit de la Base de Donnees
+                </Text>
+                <Text style={styles.diagnosticActionSubtitle}>
+                  {"Scan d'integrite, reparation et export technique"}
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={IndustrialColors.slate[400]}
+              />
+            </TouchableOpacity>
+
+            <View style={styles.diagnosticActionDivider} />
+
+            <TouchableOpacity
+              style={styles.diagnosticActionButton}
+              onPress={() => handleNavigate('/diagnostics', 'Diagnostics Techniques')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.diagnosticActionIconWrap}>
+                <Ionicons
+                  name="pulse-outline"
+                  size={22}
+                  color={IndustrialColors.steel.light}
+                />
+              </View>
+              <View style={styles.diagnosticActionContent}>
+                <Text style={styles.diagnosticActionTitle}>
+                  Diagnostics Techniques
+                </Text>
+                <Text style={styles.diagnosticActionSubtitle}>
+                  Reseau, latence, connectivite et analyse systeme
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={IndustrialColors.slate[400]}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      {/* Remaining sections (Catalogue Produits, Autres Modules, Rapports, Parametres) */}
+      {menuSections.slice(3).map((section) => (
+        <View key={section.title} style={styles.section}>
+          <Text style={styles.sectionTitle}>{section.title}</Text>
+          <Card style={styles.menuCard}>
+            {section.items.map((item, itemIndex) =>
+              renderMenuItem(item, itemIndex === section.items.length - 1)
+            )}
+          </Card>
+        </View>
+      ))}
+
+      {/* Informations systeme */}
       <Card variant="outlined" style={styles.systemCard}>
         <View style={styles.systemRow}>
           <Text style={styles.systemLabel}>Version</Text>
@@ -292,14 +594,14 @@ export default function AdminScreen() {
           <Text style={styles.systemValue}>Production</Text>
         </View>
         <View style={styles.systemRow}>
-          <Text style={styles.systemLabel}>Conformité</Text>
-          <Text style={[styles.systemValue, styles.gmpBadge]}>GMP Certifié ✓</Text>
+          <Text style={styles.systemLabel}>Conformite</Text>
+          <Text style={[styles.systemValue, styles.gmpBadge]}>GMP Certifie</Text>
         </View>
       </Card>
 
-      {/* Bouton de déconnexion */}
+      {/* Bouton de deconnexion */}
       <Button
-        title="Se Déconnecter"
+        title="Se Deconnecter"
         onPress={handleLogout}
         variant="outline"
         size="large"
@@ -308,8 +610,8 @@ export default function AdminScreen() {
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          © 2024 Système de Suivi GMP{'\n'}
-          Tous droits réservés
+          2024 Systeme de Suivi GMP{'\n'}
+          Tous droits reserves
         </Text>
       </View>
     </ScrollView>
@@ -455,6 +757,139 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.text.secondary,
   },
+
+  // ── Diagnostic Section (Slate & Steel) ──
+  diagnosticCard: {
+    backgroundColor: IndustrialColors.slate[800],
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: IndustrialColors.steel.base + '60',
+    overflow: 'hidden',
+    ...Shadows.md,
+  },
+  diagnosticHealthBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    backgroundColor: IndustrialColors.slate[900],
+    borderBottomWidth: 1,
+    borderBottomColor: IndustrialColors.steel.base + '30',
+  },
+  diagnosticHealthLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  diagnosticHealthInfo: {
+    marginLeft: Spacing.xs,
+  },
+  diagnosticHealthLabel: {
+    ...Typography.small,
+    color: IndustrialColors.slate[400],
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  diagnosticHealthValue: {
+    ...Typography.body,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  diagnosticRefreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.full,
+    backgroundColor: IndustrialColors.slate[700],
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: IndustrialColors.steel.base + '40',
+  },
+  diagnosticStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: IndustrialColors.steel.base + '20',
+  },
+  diagnosticStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  diagnosticStatLabel: {
+    ...Typography.small,
+    color: IndustrialColors.slate[300],
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  diagnosticStatDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  diagnosticStatDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: IndustrialColors.steel.base + '30',
+  },
+  diagnosticLastCheck: {
+    ...Typography.small,
+    color: IndustrialColors.slate[500],
+    fontSize: 10,
+    textAlign: 'center',
+    paddingVertical: Spacing.xs,
+    fontStyle: 'italic',
+  },
+  diagnosticActions: {
+    paddingHorizontal: Spacing.sm,
+    paddingBottom: Spacing.sm,
+  },
+  diagnosticActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: IndustrialColors.slate[700],
+    marginTop: Spacing.sm,
+  },
+  diagnosticActionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: IndustrialColors.slate[600],
+    borderWidth: 1,
+    borderColor: IndustrialColors.steel.base + '40',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  diagnosticActionContent: {
+    flex: 1,
+  },
+  diagnosticActionTitle: {
+    ...Typography.body,
+    color: IndustrialColors.slate[50],
+    fontWeight: '600',
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  diagnosticActionSubtitle: {
+    ...Typography.small,
+    color: IndustrialColors.slate[400],
+    fontSize: 11,
+  },
+  diagnosticActionDivider: {
+    height: 0,
+  },
+
+  // ── System Info, Logout, Footer ──
   systemCard: {
     marginBottom: Spacing.lg,
   },

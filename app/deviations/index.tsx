@@ -53,7 +53,7 @@ export default function DeviationsScreen() {
 
       if (error) throw error;
 
-      setDeviations((data as Deviation[]) || []);
+      setDeviations((data as unknown as Deviation[]) || []);
     } catch (error) {
       console.error('Error fetching deviations:', error);
     } finally {

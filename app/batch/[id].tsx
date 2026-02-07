@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -26,6 +25,9 @@ import {
   logDeviationCreation,
   logQRGeneration,
 } from '@/lib/auditLog';
+import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/components/Toast';
+import { Skeleton, TimelineItemSkeleton } from '@/components/SkeletonLoader';
 
 type Batch = Database['public']['Tables']['batches']['Row'];
 type Product = Database['public']['Tables']['products']['Row'];
@@ -44,6 +46,8 @@ interface BatchWithDetails extends Batch {
 export default function BatchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
+  const toast = useToast();
   const [batch, setBatch] = useState<BatchWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -91,7 +95,7 @@ export default function BatchDetailScreen() {
         .order('signature_order', { ascending: true });
 
       // Map signatures to steps
-      const stepsWithSignatures = (stepsData as StepInstance[] || []).map((step) => ({
+      const stepsWithSignatures = (stepsData as unknown as StepInstance[] || []).map((step) => ({
         ...step,
         signatures: signaturesData?.filter((sig) => sig.step_instance_id === step.id) || [],
       }));
@@ -127,26 +131,27 @@ export default function BatchDetailScreen() {
       });
     } catch (error) {
       console.error('Error fetching batch details:', error);
-      Alert.alert('Erreur', 'Impossible de charger les détails du lot');
+      toast.showError('Erreur', 'Impossible de charger les détails du lot');
     } finally {
       setLoading(false);
     }
   };
 
   const handleCheckIn = async (step: StepInstance) => {
+    if (!user) {
+      toast.showError('Erreur', 'Vous devez être connecté pour effectuer cette action');
+      return;
+    }
+
     try {
       setActionLoading(true);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-      // Mock user data - in production, get from auth context
-      const mockUserId = 'user-123';
-      const mockUserName = 'Jean Dupont';
 
       // Update step assignment
       await supabase
         .from('step_instances')
         .update({
-          assigned_to: mockUserName,
+          assigned_to: user.name,
           assigned_at: new Date().toISOString(),
           status: 'in_progress',
           started_at: step.started_at || new Date().toISOString(),
@@ -158,47 +163,51 @@ export default function BatchDetailScreen() {
         step_instance_id: step.id,
         from_status: step.status,
         to_status: 'in_progress',
-        changed_by: mockUserId,
-        notes: `Check-in par ${mockUserName}`,
+        changed_by: user.id,
+        notes: `Check-in par ${user.name}`,
       });
 
       // Log audit trail
       await logStepAssignment(
         step.id,
         step.step_definition?.name || 'Étape',
-        mockUserId,
-        mockUserName,
-        'OPERATOR',
-        mockUserName
+        user.id,
+        user.name,
+        user.role,
+        user.name
       );
 
-      Alert.alert('Check-in Réussi', `Vous êtes maintenant assigné à cette étape`);
+      toast.showSuccess('Check-in Réussi', 'Vous êtes maintenant assigné à cette étape');
       fetchBatchDetails();
     } catch (error) {
       console.error('Error checking in:', error);
-      Alert.alert('Erreur', 'Impossible de s\'assigner à cette étape');
+      toast.showError('Erreur', 'Impossible de s\'assigner à cette étape');
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleOpenSignatureModal = async (step: StepInstance & { signatures: ElectronicSignature[] }) => {
+    if (!user) {
+      toast.showError('Erreur', 'Vous devez être connecté pour signer');
+      return;
+    }
+
     const requiresDoubleValidation = step.step_definition?.requires_double_validation || false;
     const existingSignatures = step.signatures.length;
 
     if (requiresDoubleValidation && existingSignatures >= 2) {
-      Alert.alert('Info', 'Cette étape a déjà été validée par deux signatures');
+      toast.showInfo('Info', 'Cette étape a déjà été validée par deux signatures');
       return;
     }
 
     if (!requiresDoubleValidation && existingSignatures >= 1) {
-      Alert.alert('Info', 'Cette étape a déjà été signée');
+      toast.showInfo('Info', 'Cette étape a déjà été signée');
       return;
     }
 
     // Check operator qualification (CRITICAL COMPLIANCE FEATURE)
-    const mockUserId = 'user-1'; // In production, use real user ID from auth context
-    const qualificationCheck = await checkOperatorQualification(mockUserId, step.step_definition);
+    const qualificationCheck = await checkOperatorQualification(user.id, step.step_definition);
 
     if (!qualificationCheck.isQualified) {
       Alert.alert(
@@ -210,7 +219,7 @@ export default function BatchDetailScreen() {
             text: 'Formation',
             onPress: () => {
               // Navigate to training screen
-              Alert.alert('Formation', 'Accédez au module de formation pour obtenir cette habilitation.');
+              toast.showInfo('Formation', 'Accédez au module de formation pour obtenir cette habilitation.');
             },
           },
         ]
@@ -224,20 +233,17 @@ export default function BatchDetailScreen() {
   };
 
   const handleSign = async (signatureData: SignatureData) => {
-    if (!currentSigningStep || !batch) return;
+    if (!currentSigningStep || !batch || !user) return;
 
     try {
       setActionLoading(true);
-
-      // Mock user ID - in production, get from auth context
-      const mockUserId = 'user-123';
 
       // Create electronic signature
       const { error: signatureError } = await supabase
         .from('electronic_signatures')
         .insert({
           step_instance_id: currentSigningStep.id,
-          signer_user_id: mockUserId,
+          signer_user_id: user.id,
           signer_name: signatureData.signerName,
           signer_role: signatureData.signerRole,
           signature_type: signatureData.signatureType,
@@ -252,7 +258,7 @@ export default function BatchDetailScreen() {
         .from('electronic_signatures')
         .select('id')
         .eq('step_instance_id', currentSigningStep.id)
-        .eq('signer_user_id', mockUserId)
+        .eq('signer_user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
@@ -261,7 +267,7 @@ export default function BatchDetailScreen() {
         await logElectronicSignature(
           createdSignature.id,
           currentSigningStep.step_definition?.name || 'Étape',
-          mockUserId,
+          user.id,
           signatureData.signerName,
           signatureData.signerRole,
           signatureData.signatureOrder
@@ -324,9 +330,9 @@ export default function BatchDetailScreen() {
             .eq('id', batch.id);
         }
 
-        Alert.alert('Succès', 'Étape validée et signature enregistrée');
+        toast.showSuccess('Succès', 'Étape validée et signature enregistrée');
       } else {
-        Alert.alert(
+        toast.showSuccess(
           'Première Signature',
           'Première signature enregistrée. Une deuxième signature est requise pour valider cette étape.'
         );
@@ -335,7 +341,7 @@ export default function BatchDetailScreen() {
       fetchBatchDetails();
     } catch (error) {
       console.error('Error signing:', error);
-      Alert.alert('Erreur', 'Impossible d\'enregistrer la signature');
+      toast.showError('Erreur', 'Impossible d\'enregistrer la signature');
     } finally {
       setActionLoading(false);
       setSignatureModalVisible(false);
@@ -348,6 +354,11 @@ export default function BatchDetailScreen() {
   };
 
   const handleRegenerateQR = async (batchId: string, batchNumber: string) => {
+    if (!user) {
+      toast.showError('Erreur', 'Vous devez être connecté pour effectuer cette action');
+      return;
+    }
+
     Alert.alert(
       'Régénérer le QR Code',
       'Voulez-vous régénérer un nouveau token QR pour ce lot? Cette action est irréversible.',
@@ -380,15 +391,14 @@ export default function BatchDetailScreen() {
               }
 
               // Log QR regeneration
-              const mockUserId = 'user-123';
-              await logQRGeneration(batchId, batchNumber, mockUserId, 'Admin User', 'ADMIN', 'regenerated');
+              await logQRGeneration(batchId, batchNumber, user.id, user.name, user.role, 'regenerated');
 
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert('Succès', 'QR Code régénéré avec succès');
+              toast.showSuccess('Succès', 'QR Code régénéré avec succès');
               fetchBatchDetails();
             } catch (error) {
               console.error('Error regenerating QR:', error);
-              Alert.alert('Erreur', 'Impossible de régénérer le QR Code');
+              toast.showError('Erreur', 'Impossible de régénérer le QR Code');
             } finally {
               setActionLoading(false);
             }
@@ -399,10 +409,12 @@ export default function BatchDetailScreen() {
   };
 
   const handleSubmitDeviation = async (data: DeviationFormData) => {
-    try {
-      // Mock user data - in production, get from auth context
-      const mockUserName = 'Jean Dupont';
+    if (!user) {
+      toast.showError('Erreur', 'Vous devez être connecté pour signaler une déviation');
+      return;
+    }
 
+    try {
       const { error } = await supabase.from('deviations').insert({
         title: data.title,
         description: data.description,
@@ -410,7 +422,7 @@ export default function BatchDetailScreen() {
         immediate_action: data.immediateAction,
         batch_id: id,
         step_instance_id: data.stepInstanceId,
-        reported_by: mockUserName,
+        reported_by: user.name,
         reported_at: new Date().toISOString(),
         status: 'open',
       });
@@ -430,16 +442,16 @@ export default function BatchDetailScreen() {
         await logDeviationCreation(
           createdDeviation.id,
           batch.batch_number,
-          'user-123',
-          mockUserName,
-          'OPERATOR',
+          user.id,
+          user.name,
+          user.role,
           data.severity,
           data.title
         );
       }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Succès', 'Déviation enregistrée avec succès');
+      toast.showSuccess('Succès', 'Déviation enregistrée avec succès');
       fetchBatchDetails();
     } catch (error) {
       console.error('Error reporting deviation:', error);
@@ -574,8 +586,36 @@ Réponds au format JSON:
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+      <View style={styles.container}>
+        <ScrollView contentContainerStyle={styles.content}>
+          {/* Header Skeleton */}
+          <Card style={styles.headerCard}>
+            <View style={styles.headerRow}>
+              <View style={styles.headerLeft}>
+                <Skeleton width="50%" height={24} style={{ marginBottom: Spacing.xs }} />
+                <Skeleton width="70%" height={16} style={{ marginBottom: Spacing.xs }} />
+                <Skeleton width="40%" height={14} />
+              </View>
+              <Skeleton width={90} height={28} borderRadius={BorderRadius.sm} />
+            </View>
+          </Card>
+
+          {/* Timeline Skeleton */}
+          <View style={styles.section}>
+            <Skeleton width="55%" height={20} style={{ marginBottom: Spacing.md }} />
+            <Card style={styles.timelineCard}>
+              <TimelineItemSkeleton />
+              <TimelineItemSkeleton />
+              <TimelineItemSkeleton />
+            </Card>
+          </View>
+
+          {/* Audit Trail Skeleton */}
+          <View style={styles.section}>
+            <Skeleton width="40%" height={20} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={80} borderRadius={BorderRadius.md} />
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -835,7 +875,7 @@ Réponds au format JSON:
                           ))}
                           {requiresDoubleValidation && hasFirstSignature && !hasSecondSignature && (
                             <Text style={styles.pendingSignatureText}>
-                              ⏳ En attente de la 2ème signature
+                              En attente de la 2ème signature
                             </Text>
                           )}
                         </View>
@@ -1031,8 +1071,8 @@ Réponds au format JSON:
           existingSignature={
             batch.steps.find((s) => s.id === currentSigningStep.id)?.signatures[0]
               ? {
-                  signerName: batch.steps.find((s) => s.id === currentSigningStep.id)!.signatures[0].signer_name,
-                  signerRole: batch.steps.find((s) => s.id === currentSigningStep.id)!.signatures[0].signer_role,
+                  signerName: batch.steps.find((s) => s.id === currentSigningStep.id)!.signatures[0].signer_name || '',
+                  signerRole: batch.steps.find((s) => s.id === currentSigningStep.id)!.signatures[0].signer_role || '',
                   signedAt: batch.steps.find((s) => s.id === currentSigningStep.id)!.signatures[0].signed_at,
                 }
               : undefined

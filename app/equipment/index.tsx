@@ -347,7 +347,7 @@ export default function EquipmentListScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Date d'expiration de la calibration</Text>
+                <Text style={styles.label}>{"Date d'expiration de la calibration"}</Text>
                 <TouchableOpacity
                   style={styles.dateButton}
                   onPress={() => setShowCalibrationPicker(true)}
@@ -386,7 +386,7 @@ export default function EquipmentListScreen() {
               </View>
 
               <TouchableOpacity style={styles.addButton} onPress={handleAddEquipment}>
-                <Text style={styles.addButtonText}>Ajouter l'équipement</Text>
+                <Text style={styles.addButtonText}>{"Ajouter l'équipement"}</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>

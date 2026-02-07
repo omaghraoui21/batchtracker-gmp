@@ -14,7 +14,6 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/Card';
-import { Button } from '@/components/Button';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -111,7 +110,7 @@ export default function DeviationLibraryScreen() {
 
       if (error) throw error;
 
-      setDeviationTypes(data || []);
+      setDeviationTypes((data || []) as DeviationType[]);
     } catch (error) {
       console.error('Error fetching deviation types:', error);
       Alert.alert('Erreur', 'Impossible de charger la bibliothèque des déviations');
