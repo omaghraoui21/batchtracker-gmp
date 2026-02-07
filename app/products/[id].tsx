@@ -148,6 +148,11 @@ export default function ProductEditScreen() {
   const handleSave = async () => {
     if (!validateForm()) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        'Validation Échouée',
+        'Veuillez remplir tous les champs obligatoires avant de continuer.',
+        [{ text: 'OK' }]
+      );
       return;
     }
 
@@ -155,6 +160,11 @@ export default function ProductEditScreen() {
     const isUnique = await checkProductCodeUnique();
     if (!isUnique) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        'Code Produit Existant',
+        `Le code produit "${formData.product_code}" existe déjà dans le catalogue. Veuillez utiliser un code unique.`,
+        [{ text: 'OK' }]
+      );
       return;
     }
 
@@ -170,63 +180,117 @@ export default function ProductEditScreen() {
         const { data, error } = await supabase
           .from('products')
           .insert({
-            product_code: formData.product_code,
-            product_name: formData.product_name,
-            technical_description: formData.technical_description || null,
+            product_code: formData.product_code.trim(),
+            product_name: formData.product_name.trim(),
+            technical_description: formData.technical_description?.trim() || null,
             is_active: formData.is_active,
             created_by: mockUserId,
           })
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase insert error:', error);
+
+          // Handle specific error types
+          if (error.code === '23505') {
+            // Unique constraint violation
+            throw new Error('DUPLICATE_PRODUCT_CODE');
+          }
+
+          throw error;
+        }
 
         // Log creation
-        await logProductAdded(
-          data.id,
-          data.product_code,
-          data.product_name,
-          mockUserId,
-          mockUserName,
-          'ADMIN'
-        );
+        try {
+          await logProductAdded(
+            data.id,
+            data.product_code,
+            data.product_name,
+            mockUserId,
+            mockUserName,
+            'ADMIN'
+          );
+        } catch (auditError) {
+          console.warn('Audit logging failed (non-critical):', auditError);
+          // Continue - audit failure shouldn't block product creation
+        }
 
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Succès', 'Produit ajouté au catalogue', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+        Alert.alert(
+          'Succès',
+          `Le produit ${data.product_code} a été ajouté au catalogue avec succès.`,
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
       } else {
         // Update existing product
         const { error } = await supabase
           .from('products')
           .update({
-            product_code: formData.product_code,
-            product_name: formData.product_name,
-            technical_description: formData.technical_description || null,
+            product_code: formData.product_code.trim(),
+            product_name: formData.product_name.trim(),
+            technical_description: formData.technical_description?.trim() || null,
             is_active: formData.is_active,
           })
           .eq('id', id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase update error:', error);
+
+          // Handle specific error types
+          if (error.code === '23505') {
+            throw new Error('DUPLICATE_PRODUCT_CODE');
+          }
+
+          throw error;
+        }
 
         // Log modification
-        await logProductModified(
-          id,
-          formData.product_code,
-          mockUserId,
-          mockUserName,
-          'ADMIN',
-          formData
-        );
+        try {
+          await logProductModified(
+            id,
+            formData.product_code,
+            mockUserId,
+            mockUserName,
+            'ADMIN',
+            formData
+          );
+        } catch (auditError) {
+          console.warn('Audit logging failed (non-critical):', auditError);
+          // Continue - audit failure shouldn't block product update
+        }
 
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Succès', 'Produit modifié avec succès', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+        Alert.alert(
+          'Succès',
+          `Le produit ${formData.product_code} a été modifié avec succès.`,
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving product:', error);
-      Alert.alert('Erreur', 'Impossible de sauvegarder le produit');
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
+      // Provide specific error messages
+      let errorMessage = 'Une erreur technique est survenue lors de la sauvegarde.';
+      let errorTitle = 'Erreur de Sauvegarde';
+
+      if (error.message === 'DUPLICATE_PRODUCT_CODE') {
+        errorTitle = 'Code Produit Existant';
+        errorMessage = `Le code produit "${formData.product_code}" existe déjà. Veuillez utiliser un code unique.`;
+      } else if (error.code === '23502') {
+        errorTitle = 'Données Manquantes';
+        errorMessage = 'Certains champs obligatoires sont manquants. Veuillez vérifier le formulaire.';
+      } else if (error.code === '23503') {
+        errorTitle = 'Référence Invalide';
+        errorMessage = 'Une référence associée est invalide. Veuillez contacter le support.';
+      } else if (error.message?.includes('Failed to fetch')) {
+        errorTitle = 'Problème de Connexion';
+        errorMessage = 'Impossible de contacter le serveur. Vérifiez votre connexion Internet.';
+      }
+
+      Alert.alert(errorTitle, errorMessage, [{ text: 'OK' }]);
     } finally {
       setSaving(false);
     }

@@ -65,20 +65,19 @@ export interface AuditLogEntry {
 export async function logAudit(entry: AuditLogEntry): Promise<void> {
   try {
     const { error } = await supabase
-      .from('audit_log')
+      .from('audit_trail')
       .insert({
-        action: entry.action,
-        module: entry.module,
+        action_type: entry.action,
+        event_type: entry.action,
         entity_type: entry.entity_type,
         entity_id: entry.entity_id,
         user_id: entry.user_id,
         user_name: entry.user_name,
         user_role: entry.user_role,
         description: entry.description,
-        old_value: entry.old_value,
-        new_value: entry.new_value,
+        old_value: entry.old_value ? JSON.parse(JSON.stringify(entry.old_value)) : null,
+        new_value: entry.new_value ? JSON.parse(JSON.stringify(entry.new_value)) : null,
         ip_address: entry.ip_address,
-        metadata: entry.metadata,
         timestamp: new Date().toISOString(),
       });
 
