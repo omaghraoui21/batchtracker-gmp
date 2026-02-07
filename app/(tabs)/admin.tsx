@@ -165,6 +165,19 @@ export default function AdminScreen() {
       ],
     },
     {
+      title: 'Système',
+      items: [
+        {
+          id: 'db-audit',
+          icon: 'server-outline',
+          title: 'DB Audit & Repair',
+          subtitle: 'Diagnostic base de données et réparation',
+          onPress: () => router.push('/db-audit'),
+          color: '#708090', // Steel Grey
+        },
+      ],
+    },
+    {
       title: 'Paramètres',
       items: [
         {
