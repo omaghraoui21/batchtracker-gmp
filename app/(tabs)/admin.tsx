@@ -147,6 +147,14 @@ export default function AdminScreen() {
           color: Colors.error,
         },
         {
+          id: 'deviation-library',
+          icon: 'library-outline',
+          title: 'Bibliothèque des Déviations',
+          subtitle: 'Types de déviations standards GMP',
+          onPress: () => router.push('/deviation-library'),
+          color: '#DC2626', // Ruby Red
+        },
+        {
           id: 'audit',
           icon: 'document-text-outline',
           title: 'Journal d\'Audit',

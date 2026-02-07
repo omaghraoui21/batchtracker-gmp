@@ -17,6 +17,7 @@ import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/
 import { Card } from '@/components/Card';
 import { supabase } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DeviationAnalyticsWidget } from '@/components/DeviationAnalyticsWidget';
 
 type TimePeriod = 'day' | 'week' | 'month' | 'quarter';
 type AnalyticsTab = 'executive' | 'sla' | 'quality';
@@ -746,6 +747,12 @@ Sois concis, précis et professionnel.`;
           ))}
         </Card>
       )}
+
+      {/* Phase 9: Deviation Analytics Widget */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Analyse des Déviations (Phase 9)</Text>
+        <DeviationAnalyticsWidget />
+      </View>
     </Animated.View>
   );
 

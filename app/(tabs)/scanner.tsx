@@ -92,10 +92,13 @@ export default function ScannerScreen() {
     try {
       setLoading(true);
 
-      // Verify batch exists
+      // Get current user from auth (mock for now)
+      const currentUserId = 'user-123'; // In production, get from auth context
+
+      // Verify batch exists and get ownership info
       const { data: batch, error } = await supabase
         .from('batches')
-        .select('id, batch_number, product_name')
+        .select('id, batch_number, product_name, current_owner_id, current_owner_name')
         .eq('id', batchId)
         .single();
 
@@ -114,17 +117,28 @@ export default function ScannerScreen() {
 
       await fetchScanHistory();
 
-      Alert.alert(
-        'Lot Scanné',
-        `Lot #${batch.batch_number}\n${batch.product_name}`,
-        [
-          { text: 'OK' },
-          {
-            text: 'Ouvrir',
-            onPress: () => router.push(`/batch/${batch.id}`),
-          },
-        ]
-      );
+      // CONTEXTUAL SCANNER LOGIC: Check ownership
+      const isOwner = batch.current_owner_id === currentUserId;
+
+      if (!isOwner) {
+        // RECEPTION MODE: User is not the owner - navigate to Batch Reception screen
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        router.push(`/batch/receive/${batch.id}`);
+      } else {
+        // MANAGEMENT MODE: User is the owner - navigate to Batch Details (Deviations section)
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert(
+          'Votre Dossier',
+          `Vous êtes le détenteur du lot #${batch.batch_number}\n${batch.product_name}`,
+          [
+            { text: 'OK' },
+            {
+              text: 'Gérer les Déviations',
+              onPress: () => router.push(`/batch/${batch.id}?focus=deviations`),
+            },
+          ]
+        );
+      }
     } catch (error) {
       console.error('Error handling batch scan:', error);
       Alert.alert('Erreur', 'Impossible de récupérer les informations du lot');

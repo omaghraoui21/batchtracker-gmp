@@ -20,7 +20,11 @@ export type AuditAction =
   | 'LOGIN'
   | 'LOGOUT'
   | 'ACCESS'
-  | 'EXPORT';
+  | 'EXPORT'
+  | 'RECEIVED'       // Phase 9: Batch ownership received
+  | 'TRANSFERRED'    // Phase 9: Batch ownership transferred
+  | 'SCAN_VIEW'      // Phase 9: QR code scanned to view
+  | 'DEVIATION_ADDED'; // Phase 9: Deviation logged
 
 export type AuditModule =
   | 'BATCH'
@@ -316,4 +320,110 @@ export async function getRecentAuditLog(limit: number = 100): Promise<any[]> {
     console.error('Error fetching recent audit log:', error);
     return [];
   }
+}
+
+/**
+ * Phase 9: Log batch ownership received
+ */
+export async function logBatchReceived(
+  batchId: string,
+  batchNumber: string,
+  userId: string,
+  userName: string,
+  userRole: string,
+  previousOwner: string | null
+): Promise<void> {
+  await logAudit({
+    action: 'RECEIVED',
+    module: 'BATCH',
+    entity_type: 'batch',
+    entity_id: batchId,
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    description: `Lot ${batchNumber} reçu par ${userName}${previousOwner ? ` (précédemment: ${previousOwner})` : ''}`,
+    old_value: previousOwner,
+    new_value: userName,
+    metadata: { batchNumber, previousOwner, newOwner: userName },
+  });
+}
+
+/**
+ * Phase 9: Log batch ownership transferred
+ */
+export async function logBatchTransferred(
+  batchId: string,
+  batchNumber: string,
+  transferredById: string,
+  transferredByName: string,
+  transferredByRole: string,
+  fromOwner: string | null,
+  toOwner: string,
+  notes?: string
+): Promise<void> {
+  await logAudit({
+    action: 'TRANSFERRED',
+    module: 'BATCH',
+    entity_type: 'batch',
+    entity_id: batchId,
+    user_id: transferredById,
+    user_name: transferredByName,
+    user_role: transferredByRole,
+    description: `Lot ${batchNumber} transféré ${fromOwner ? `de ${fromOwner} ` : ''}à ${toOwner}`,
+    old_value: fromOwner,
+    new_value: toOwner,
+    metadata: { batchNumber, fromOwner, toOwner, transferredBy: transferredByName, notes },
+  });
+}
+
+/**
+ * Phase 9: Log QR code scan view
+ */
+export async function logScanView(
+  batchId: string,
+  batchNumber: string,
+  userId: string,
+  userName: string,
+  userRole: string,
+  currentOwner: string | null
+): Promise<void> {
+  await logAudit({
+    action: 'SCAN_VIEW',
+    module: 'BATCH',
+    entity_type: 'batch',
+    entity_id: batchId,
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    description: `Lot ${batchNumber} scanné par ${userName}`,
+    metadata: { batchNumber, viewer: userName, currentOwner },
+  });
+}
+
+/**
+ * Phase 9: Log deviation added (enhanced version)
+ */
+export async function logDeviationAdded(
+  deviationId: string,
+  batchId: string,
+  batchNumber: string,
+  userId: string,
+  userName: string,
+  userRole: string,
+  deviationType: string,
+  severity: string,
+  title: string
+): Promise<void> {
+  await logAudit({
+    action: 'DEVIATION_ADDED',
+    module: 'DEVIATION',
+    entity_type: 'deviation',
+    entity_id: deviationId,
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    description: `Déviation ${severity} ajoutée au lot ${batchNumber}: ${title} (${deviationType})`,
+    new_value: JSON.stringify({ severity, title, deviationType }),
+    metadata: { batchId, batchNumber, deviationType, severity, title },
+  });
 }

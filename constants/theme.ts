@@ -36,6 +36,10 @@ export const Colors = {
     urgent: '#F59E0B', // Amber - Urgent
     normal: '#0066CC', // Cobalt - Normal
   },
+
+  // Phase 9: Industrial Colors for Deviation Management
+  amber: '#F59E0B', // Amber for transfer/reception actions
+  ruby: '#DC2626', // Ruby Red for deviation-related elements
 };
 
 export const Spacing = {
