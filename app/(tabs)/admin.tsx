@@ -95,7 +95,7 @@ export default function AdminScreen() {
           icon: 'people-outline',
           title: 'Utilisateurs',
           subtitle: 'Gérer les comptes et les rôles',
-          onPress: () => Alert.alert('Utilisateurs', 'Gestion des utilisateurs'),
+          onPress: () => router.push('/users'),
         },
         {
           id: 'workflows',

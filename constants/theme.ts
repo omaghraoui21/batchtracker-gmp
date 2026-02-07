@@ -1,4 +1,4 @@
-// Thème professionnel médical/pharmaceutique
+// Thème professionnel médical/pharmaceutique - Phase 8 Enhanced
 export const Colors = {
   primary: '#0066CC', // Bleu Médical
   secondary: '#004C99',
@@ -19,6 +19,23 @@ export const Colors = {
   gold: '#D4AF37', // Or pour certifications premium
   bronze: '#CD7F32', // Bronze pour certifications
   emerald: '#50C878', // Vert émeraude pour statut actif/qualifié
+
+  // Phase 8: Professional Track & Trace Status Colors
+  status: {
+    inProgress: '#2563EB', // Cobalt Blue - En cours
+    validated: '#10B981', // Emerald Green - Validé
+    pending: '#F59E0B', // Amber - En attente
+    alert: '#DC2626', // Ruby Red - Alerte/Retard
+    completed: '#059669', // Dark Emerald - Terminé
+    blocked: '#DC2626', // Ruby - Bloqué
+  },
+
+  // Priority Colors
+  priority: {
+    critical: '#DC2626', // Ruby - Critique
+    urgent: '#F59E0B', // Amber - Urgent
+    normal: '#0066CC', // Cobalt - Normal
+  },
 };
 
 export const Spacing = {

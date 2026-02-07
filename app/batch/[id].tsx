@@ -16,9 +16,15 @@ import { supabase } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
 import ElectronicSignatureModal, { SignatureData } from '@/components/ElectronicSignatureModal';
 import DeviationReportModal, { DeviationFormData } from '@/components/DeviationReportModal';
+import { AuditTrail } from '@/components/AuditTrail';
 import * as Haptics from 'expo-haptics';
 import { generateText } from '@fastshot/ai';
 import { checkOperatorQualification } from '@/lib/trainingUtils';
+import {
+  logStepAssignment,
+  logElectronicSignature,
+  logDeviationCreation,
+} from '@/lib/auditLog';
 
 type Batch = Database['public']['Tables']['batches']['Row'];
 type StepInstance = Database['public']['Tables']['step_instances']['Row'] & {
@@ -138,6 +144,16 @@ export default function BatchDetailScreen() {
         notes: `Check-in par ${mockUserName}`,
       });
 
+      // Log audit trail
+      await logStepAssignment(
+        step.id,
+        step.step_definition?.name || 'Étape',
+        mockUserId,
+        mockUserName,
+        'OPERATOR',
+        mockUserName
+      );
+
       Alert.alert('Check-in Réussi', `Vous êtes maintenant assigné à cette étape`);
       fetchBatchDetails();
     } catch (error) {
@@ -212,6 +228,27 @@ export default function BatchDetailScreen() {
         });
 
       if (signatureError) throw signatureError;
+
+      // Log electronic signature for audit trail
+      const { data: createdSignature } = await supabase
+        .from('electronic_signatures')
+        .select('id')
+        .eq('step_instance_id', currentSigningStep.id)
+        .eq('signer_user_id', mockUserId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (createdSignature) {
+        await logElectronicSignature(
+          createdSignature.id,
+          currentSigningStep.step_definition?.name || 'Étape',
+          mockUserId,
+          signatureData.signerName,
+          signatureData.signerRole,
+          signatureData.signatureOrder
+        );
+      }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -310,6 +347,27 @@ export default function BatchDetailScreen() {
       });
 
       if (error) throw error;
+
+      // Get the created deviation for audit logging
+      const { data: createdDeviation } = await supabase
+        .from('deviations')
+        .select('id')
+        .eq('batch_id', id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (createdDeviation && batch) {
+        await logDeviationCreation(
+          createdDeviation.id,
+          batch.batch_number,
+          'user-123',
+          mockUserName,
+          'OPERATOR',
+          data.severity,
+          data.title
+        );
+      }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Succès', 'Déviation enregistrée avec succès');
@@ -641,7 +699,7 @@ Réponds au format JSON:
                       {step.signatures.length > 0 && (
                         <View style={styles.signaturesContainer}>
                           <Text style={styles.signaturesTitle}>Signatures:</Text>
-                          {step.signatures.map((sig) => (
+                          {step.signatures.map((sig: ElectronicSignature) => (
                             <View key={sig.id} style={styles.signatureRow}>
                               <Ionicons name="create" size={14} color={Colors.success} />
                               <Text style={styles.signatureText}>
@@ -811,6 +869,11 @@ Réponds au format JSON:
             <Text style={styles.deviationReportButtonText}>Signaler une Déviation</Text>
           </TouchableOpacity>
         )}
+
+        {/* Audit Trail */}
+        <View style={styles.section}>
+          <AuditTrail entityType="batch" entityId={id} limit={5} />
+        </View>
 
         {/* eBMR PDF Generation Button */}
         {batch.status === 'completed' && (

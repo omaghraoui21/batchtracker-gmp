@@ -19,6 +19,7 @@ import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
 import type { Database } from '@/lib/database.types';
+import { logBatchCreation } from '@/lib/auditLog';
 
 type WorkflowTemplate = Database['public']['Tables']['workflow_templates']['Row'];
 
@@ -238,22 +239,20 @@ export default function NewBatchScreen() {
         }
       }
 
+      // Log batch creation for audit trail
+      await logBatchCreation(
+        batchData.id,
+        batchData.batch_number,
+        mockUserId,
+        'Admin User', // In production, get from auth context
+        'ADMIN',
+        batchData.product_name
+      );
+
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      Alert.alert(
-        'Succès',
-        `Lot #${formData.batchNumber} créé avec succès`,
-        [
-          {
-            text: 'Voir le Lot',
-            onPress: () => router.replace(`/batch/${batchData.id}`),
-          },
-          {
-            text: 'Voir le Label QR',
-            onPress: () => router.replace(`/batch/label/${batchData.id}`),
-          },
-        ]
-      );
+      // Automatically redirect to newly created batch details
+      router.replace(`/batch/${batchData.id}`);
     } catch (error) {
       console.error('Error creating batch:', error);
       Alert.alert('Erreur', 'Impossible de créer le lot');
@@ -262,8 +261,9 @@ export default function NewBatchScreen() {
     }
   };
 
-  const nextStep = () => {
+  const nextStep = async () => {
     if (currentStep === 1) {
+      // Validate Step 1: Identification
       if (!formData.batchNumber.trim()) {
         Alert.alert('Erreur', 'Veuillez saisir un numéro de lot');
         return;
@@ -276,7 +276,27 @@ export default function NewBatchScreen() {
         Alert.alert('Erreur', 'Veuillez saisir un nom de produit');
         return;
       }
+      if (!formData.workflowTemplateId) {
+        Alert.alert('Erreur', 'Veuillez sélectionner un modèle de workflow');
+        return;
+      }
+
+      // Final check for uniqueness before proceeding
+      const isUnique = await checkBatchNumberUnique(formData.batchNumber);
+      if (!isUnique) {
+        Alert.alert('Erreur', 'Ce numéro de lot existe déjà');
+        return;
+      }
     }
+
+    if (currentStep === 2) {
+      // Validate Step 2: Dates
+      if (formData.expiryDate <= formData.manufacturingDate) {
+        Alert.alert('Erreur', 'La date d\'expiration doit être après la date de fabrication');
+        return;
+      }
+    }
+
     setCurrentStep(currentStep + 1);
   };
 
@@ -701,7 +721,7 @@ export default function NewBatchScreen() {
               title="Suivant"
               onPress={nextStep}
               style={styles.navButton}
-              disabled={loading}
+              disabled={loading || checkingUnique}
             />
           ) : (
             <Button
