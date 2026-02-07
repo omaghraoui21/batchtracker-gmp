@@ -24,6 +24,7 @@ import {
   logStepAssignment,
   logElectronicSignature,
   logDeviationCreation,
+  logQRGeneration,
 } from '@/lib/auditLog';
 
 type Batch = Database['public']['Tables']['batches']['Row'];
@@ -329,6 +330,57 @@ export default function BatchDetailScreen() {
     setDeviationModalVisible(true);
   };
 
+  const handleRegenerateQR = async (batchId: string, batchNumber: string) => {
+    Alert.alert(
+      'Régénérer le QR Code',
+      'Voulez-vous régénérer un nouveau token QR pour ce lot? Cette action est irréversible.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Régénérer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+
+              // Generate new UUID token
+              const { data: updatedBatch, error } = await supabase.rpc('generate_new_qr_token', {
+                batch_id_param: batchId,
+              });
+
+              if (error) {
+                // Fallback: manually update with new UUID
+                const newToken = crypto.randomUUID();
+                const { error: updateError } = await supabase
+                  .from('batches')
+                  .update({
+                    qr_token: newToken,
+                    qr_code_data: `BATCH:${newToken}`,
+                  })
+                  .eq('id', batchId);
+
+                if (updateError) throw updateError;
+              }
+
+              // Log QR regeneration
+              const mockUserId = 'user-123';
+              await logQRGeneration(batchId, batchNumber, mockUserId, 'Admin User', 'ADMIN', 'regenerated');
+
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert('Succès', 'QR Code régénéré avec succès');
+              fetchBatchDetails();
+            } catch (error) {
+              console.error('Error regenerating QR:', error);
+              Alert.alert('Erreur', 'Impossible de régénérer le QR Code');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleSubmitDeviation = async (data: DeviationFormData) => {
     try {
       // Mock user data - in production, get from auth context
@@ -538,6 +590,15 @@ Réponds au format JSON:
             <View style={styles.headerLeft}>
               <Text style={styles.batchNumber}>Lot #{batch.batch_number}</Text>
               <Text style={styles.productName}>{batch.product_name}</Text>
+              {/* Phase 10: Show auto-assignment badge */}
+              {batch.assigned_by_rule && batch.assigned_to && (
+                <View style={styles.autoAssignedBadge}>
+                  <Ionicons name="flash" size={14} color={Colors.warning} />
+                  <Text style={styles.autoAssignedText}>
+                    Auto-assigné: {batch.assigned_to}
+                  </Text>
+                </View>
+              )}
             </View>
             <View
               style={[
@@ -555,6 +616,18 @@ Réponds au format JSON:
               <Ionicons name="flag" size={16} color={Colors.error} />
               <Text style={styles.priorityText}>Priorité élevée</Text>
             </View>
+          )}
+
+          {/* Phase 10: Regenerate QR Button (Admin only) */}
+          {batch.qr_token && (
+            <TouchableOpacity
+              style={styles.regenerateQRButton}
+              onPress={() => handleRegenerateQR(batch.id, batch.batch_number)}
+              disabled={actionLoading}
+            >
+              <Ionicons name="qr-code-outline" size={16} color={Colors.primary} />
+              <Text style={styles.regenerateQRText}>Régénérer QR</Text>
+            </TouchableOpacity>
           )}
         </Card>
 
@@ -1315,5 +1388,40 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.surface,
     fontWeight: '700',
+  },
+  // Phase 10: Auto-assignment badge
+  autoAssignedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.warning + '15',
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.xs,
+    alignSelf: 'flex-start',
+    marginTop: Spacing.xs,
+  },
+  autoAssignedText: {
+    ...Typography.small,
+    color: Colors.warning,
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  // Phase 10: Regenerate QR button
+  regenerateQRButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    backgroundColor: Colors.primary + '15',
+    borderRadius: BorderRadius.sm,
+    alignSelf: 'flex-start',
+    marginTop: Spacing.sm,
+  },
+  regenerateQRText: {
+    ...Typography.small,
+    color: Colors.primary,
+    fontWeight: '600',
   },
 });

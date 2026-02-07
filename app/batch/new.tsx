@@ -19,7 +19,8 @@ import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
 import type { Database } from '@/lib/database.types';
-import { logBatchCreation } from '@/lib/auditLog';
+import { logBatchCreation, logDraftBatchCreation, logQRGeneration } from '@/lib/auditLog';
+import { assignBatchAutomatically } from '@/lib/assignmentEngine';
 
 type WorkflowTemplate = Database['public']['Tables']['workflow_templates']['Row'];
 
@@ -43,6 +44,7 @@ export default function NewBatchScreen() {
   const [showExpiryDatePicker, setShowExpiryDatePicker] = useState(false);
   const [batchNumberError, setBatchNumberError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
+  const [draftBatchId, setDraftBatchId] = useState<string | null>(null); // Track draft batch ID
 
   const [formData, setFormData] = useState<BatchFormData>({
     batchNumber: '',
@@ -159,13 +161,6 @@ export default function NewBatchScreen() {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    // Final check for uniqueness
-    const isUnique = await checkBatchNumberUnique(formData.batchNumber);
-    if (!isUnique) {
-      Alert.alert('Erreur', 'Ce numéro de lot existe déjà');
-      return;
-    }
-
     try {
       setLoading(true);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -173,36 +168,82 @@ export default function NewBatchScreen() {
       // Mock user ID - in production, get from auth context
       const mockUserId = 'user-123';
 
-      // Create batch
-      const { data: batchData, error: batchError } = await supabase
-        .from('batches')
-        .insert({
-          batch_number: formData.batchNumber,
-          product_name: formData.productName,
-          dossier_type: formData.dossierType,
-          manufacturing_date: formData.manufacturingDate.toISOString(),
-          expiry_date: formData.expiryDate.toISOString(),
-          assigned_to: formData.assignedTo,
-          workflow_template_id: formData.workflowTemplateId,
-          priority: formData.priority,
-          status: 'active',
-          created_by: mockUserId,
-        })
-        .select()
-        .single();
+      let batchData;
 
-      if (batchError) throw batchError;
+      if (draftBatchId) {
+        // Update existing draft to 'en_cours' status
+        const { data: updatedBatch, error: updateError } = await supabase
+          .from('batches')
+          .update({
+            assigned_to: formData.assignedTo,
+            priority: formData.priority,
+            batch_status: 'en_cours', // Move from brouillon to en_cours
+            manufacturing_date: formData.manufacturingDate.toISOString(),
+            expiry_date: formData.expiryDate.toISOString(),
+          })
+          .eq('id', draftBatchId)
+          .select()
+          .single();
 
-      // Generate QR code data
-      const qrCodeData = generateQRCodeData(batchData.id);
+        if (updateError) {
+          Alert.alert(
+            'Erreur de finalisation',
+            `Impossible de finaliser le lot: ${updateError.message}`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
 
-      // Update batch with QR code
-      const { error: updateError } = await supabase
-        .from('batches')
-        .update({ qr_code_data: qrCodeData })
-        .eq('id', batchData.id);
+        batchData = updatedBatch;
 
-      if (updateError) throw updateError;
+        // Generate QR code data using the secure qr_token
+        if (batchData.qr_token) {
+          const qrCodeData = `BATCH:${batchData.qr_token}`;
+          await supabase
+            .from('batches')
+            .update({ qr_code_data: qrCodeData })
+            .eq('id', batchData.id);
+        }
+      } else {
+        // Fallback: create batch directly (shouldn't happen with draft-first flow)
+        const { data: newBatch, error: batchError } = await supabase
+          .from('batches')
+          .insert({
+            batch_number: formData.batchNumber,
+            product_name: formData.productName,
+            dossier_type: formData.dossierType,
+            manufacturing_date: formData.manufacturingDate.toISOString(),
+            expiry_date: formData.expiryDate.toISOString(),
+            assigned_to: formData.assignedTo,
+            workflow_template_id: formData.workflowTemplateId,
+            priority: formData.priority,
+            status: 'active',
+            batch_status: 'en_cours',
+            created_by: mockUserId,
+          })
+          .select()
+          .single();
+
+        if (batchError) {
+          Alert.alert(
+            'Erreur de création',
+            `Impossible de créer le lot: ${batchError.message}`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
+        batchData = newBatch;
+
+        // Generate QR code data
+        if (batchData.qr_token) {
+          const qrCodeData = `BATCH:${batchData.qr_token}`;
+          await supabase
+            .from('batches')
+            .update({ qr_code_data: qrCodeData })
+            .eq('id', batchData.id);
+        }
+      }
 
       // Fetch step definitions for this workflow
       const { data: stepDefinitions, error: stepsError } = await supabase
@@ -236,6 +277,21 @@ export default function NewBatchScreen() {
             .from('batches')
             .update({ current_step_id: createdSteps[0].id })
             .eq('id', batchData.id);
+
+          // Phase 10: Try automatic assignment for first step
+          const firstStepDef = stepDefinitions[0];
+          const assignmentResult = await assignBatchAutomatically(
+            batchData.id,
+            firstStepDef.id,
+            mockUserId,
+            'Admin User',
+            'ADMIN'
+          );
+
+          if (!assignmentResult.success && assignmentResult.reason) {
+            // Show info that no automatic assignment was possible
+            console.log('No automatic assignment:', assignmentResult.reason);
+          }
         }
       }
 
@@ -287,6 +343,70 @@ export default function NewBatchScreen() {
         Alert.alert('Erreur', 'Ce numéro de lot existe déjà');
         return;
       }
+
+      // Phase 10: Save draft after Step 1
+      if (!draftBatchId) {
+        try {
+          setLoading(true);
+          const mockUserId = 'user-123';
+
+          const { data: draftBatch, error: draftError } = await supabase
+            .from('batches')
+            .insert({
+              batch_number: formData.batchNumber,
+              product_name: formData.productName,
+              dossier_type: formData.dossierType,
+              workflow_template_id: formData.workflowTemplateId,
+              batch_status: 'brouillon', // Draft status
+              status: 'active',
+              created_by: mockUserId,
+            })
+            .select()
+            .single();
+
+          if (draftError) {
+            // Show detailed error message
+            Alert.alert(
+              'Erreur de création',
+              `Impossible de créer le brouillon: ${draftError.message}`,
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+
+          setDraftBatchId(draftBatch.id);
+
+          // Log draft creation
+          await logDraftBatchCreation(
+            draftBatch.id,
+            draftBatch.batch_number,
+            mockUserId,
+            'Admin User',
+            'ADMIN',
+            draftBatch.product_name
+          );
+
+          // Log QR generation
+          if (draftBatch.qr_token) {
+            await logQRGeneration(
+              draftBatch.id,
+              draftBatch.batch_number,
+              mockUserId,
+              'Admin User',
+              'ADMIN',
+              draftBatch.qr_token
+            );
+          }
+
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          console.error('Error creating draft:', error);
+          Alert.alert('Erreur', 'Impossible de sauvegarder le brouillon');
+          return;
+        } finally {
+          setLoading(false);
+        }
+      }
     }
 
     if (currentStep === 2) {
@@ -294,6 +414,24 @@ export default function NewBatchScreen() {
       if (formData.expiryDate <= formData.manufacturingDate) {
         Alert.alert('Erreur', 'La date d\'expiration doit être après la date de fabrication');
         return;
+      }
+
+      // Update draft with dates
+      if (draftBatchId) {
+        try {
+          setLoading(true);
+          await supabase
+            .from('batches')
+            .update({
+              manufacturing_date: formData.manufacturingDate.toISOString(),
+              expiry_date: formData.expiryDate.toISOString(),
+            })
+            .eq('id', draftBatchId);
+        } catch (error) {
+          console.error('Error updating draft dates:', error);
+        } finally {
+          setLoading(false);
+        }
       }
     }
 

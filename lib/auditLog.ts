@@ -21,10 +21,13 @@ export type AuditAction =
   | 'LOGOUT'
   | 'ACCESS'
   | 'EXPORT'
-  | 'RECEIVED'       // Phase 9: Batch ownership received
-  | 'TRANSFERRED'    // Phase 9: Batch ownership transferred
-  | 'SCAN_VIEW'      // Phase 9: QR code scanned to view
-  | 'DEVIATION_ADDED'; // Phase 9: Deviation logged
+  | 'RECEIVED'            // Phase 9: Batch ownership received
+  | 'TRANSFERRED'         // Phase 9: Batch ownership transferred
+  | 'SCAN_VIEW'           // Phase 9: QR code scanned to view
+  | 'DEVIATION_ADDED'     // Phase 9: Deviation logged
+  | 'LOT_CREATED_DRAFT'   // Phase 10: Draft batch created
+  | 'QR_GENERATED'        // Phase 10: QR token generated
+  | 'AUTO_ASSIGNED';      // Phase 10: Batch auto-assigned by rule
 
 export type AuditModule =
   | 'BATCH'
@@ -425,5 +428,90 @@ export async function logDeviationAdded(
     description: `Déviation ${severity} ajoutée au lot ${batchNumber}: ${title} (${deviationType})`,
     new_value: JSON.stringify({ severity, title, deviationType }),
     metadata: { batchId, batchNumber, deviationType, severity, title },
+  });
+}
+
+/**
+ * Phase 10: Log draft batch creation
+ */
+export async function logDraftBatchCreation(
+  batchId: string,
+  batchNumber: string,
+  userId: string,
+  userName: string,
+  userRole: string,
+  productName: string
+): Promise<void> {
+  await logAudit({
+    action: 'LOT_CREATED_DRAFT',
+    module: 'BATCH',
+    entity_type: 'batch',
+    entity_id: batchId,
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    description: `Lot ${batchNumber} créé en mode brouillon pour le produit ${productName}`,
+    new_value: JSON.stringify({ batchNumber, productName, status: 'brouillon' }),
+    metadata: { batchNumber, productName, draftMode: true },
+  });
+}
+
+/**
+ * Phase 10: Log QR token generation
+ */
+export async function logQRGeneration(
+  batchId: string,
+  batchNumber: string,
+  userId: string,
+  userName: string,
+  userRole: string,
+  qrToken: string
+): Promise<void> {
+  await logAudit({
+    action: 'QR_GENERATED',
+    module: 'BATCH',
+    entity_type: 'batch',
+    entity_id: batchId,
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    description: `QR token généré pour le lot ${batchNumber}`,
+    new_value: qrToken,
+    metadata: { batchNumber, qrToken },
+  });
+}
+
+/**
+ * Phase 10: Log automatic assignment by rule
+ */
+export async function logAutoAssignment(
+  batchId: string,
+  batchNumber: string,
+  userId: string, // The system user or admin who triggered the rule
+  userName: string,
+  userRole: string,
+  assignedToUserId: string,
+  assignedToName: string,
+  ruleId: string,
+  ruleType: 'fixed_user' | 'round_robin' | 'least_active'
+): Promise<void> {
+  await logAudit({
+    action: 'AUTO_ASSIGNED',
+    module: 'BATCH',
+    entity_type: 'batch',
+    entity_id: batchId,
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    description: `Lot ${batchNumber} automatiquement assigné à ${assignedToName} via règle ${ruleType}`,
+    new_value: assignedToName,
+    metadata: {
+      batchNumber,
+      assignedToUserId,
+      assignedToName,
+      ruleId,
+      ruleType,
+      automatic: true,
+    },
   });
 }
