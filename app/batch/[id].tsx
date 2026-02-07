@@ -28,6 +28,7 @@ import {
 } from '@/lib/auditLog';
 
 type Batch = Database['public']['Tables']['batches']['Row'];
+type Product = Database['public']['Tables']['products']['Row'];
 type StepInstance = Database['public']['Tables']['step_instances']['Row'] & {
   step_definition: Database['public']['Tables']['step_definitions']['Row'] | null;
 };
@@ -37,6 +38,7 @@ type ElectronicSignature = Database['public']['Tables']['electronic_signatures']
 interface BatchWithDetails extends Batch {
   steps: (StepInstance & { signatures: ElectronicSignature[] })[];
   deviations: Deviation[];
+  product?: Product | null;
 }
 
 export default function BatchDetailScreen() {
@@ -103,10 +105,25 @@ export default function BatchDetailScreen() {
 
       if (deviationsError) throw deviationsError;
 
+      // Phase 11: Fetch linked product if product_id exists
+      let productData: Product | null = null;
+      if (batchData.product_id) {
+        const { data, error: productError } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', batchData.product_id)
+          .single();
+
+        if (!productError && data) {
+          productData = data;
+        }
+      }
+
       setBatch({
         ...batchData,
         steps: stepsWithSignatures,
         deviations: deviationsData || [],
+        product: productData,
       });
     } catch (error) {
       console.error('Error fetching batch details:', error);
@@ -589,7 +606,22 @@ Réponds au format JSON:
           <View style={styles.headerRow}>
             <View style={styles.headerLeft}>
               <Text style={styles.batchNumber}>Lot #{batch.batch_number}</Text>
-              <Text style={styles.productName}>{batch.product_name}</Text>
+              {/* Phase 11: Display product info from catalog */}
+              {batch.product ? (
+                <View style={styles.productInfoContainer}>
+                  <View style={styles.productCodeBadge}>
+                    <Text style={styles.productCode}>{batch.product.product_code}</Text>
+                  </View>
+                  <Text style={styles.productName}>{batch.product.product_name}</Text>
+                  {batch.product.technical_description && (
+                    <Text style={styles.productDescription} numberOfLines={2}>
+                      {batch.product.technical_description}
+                    </Text>
+                  )}
+                </View>
+              ) : (
+                <Text style={styles.productName}>{batch.product_name}</Text>
+              )}
               {/* Phase 10: Show auto-assignment badge */}
               {batch.assigned_by_rule && batch.assigned_to && (
                 <View style={styles.autoAssignedBadge}>
@@ -1058,9 +1090,34 @@ const styles = StyleSheet.create({
     ...Typography.h2,
     marginBottom: Spacing.xs,
   },
+  // Phase 11: Product info styles
+  productInfoContainer: {
+    marginTop: Spacing.xs,
+  },
+  productCodeBadge: {
+    backgroundColor: '#0047AB' + '15',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.xs,
+    alignSelf: 'flex-start',
+    marginBottom: Spacing.xs,
+  },
+  productCode: {
+    ...Typography.small,
+    fontWeight: '700',
+    color: '#0047AB',
+    fontSize: 12,
+  },
   productName: {
     ...Typography.body,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: 2,
+  },
+  productDescription: {
+    ...Typography.caption,
     color: Colors.text.secondary,
+    lineHeight: 16,
   },
   statusBadge: {
     paddingHorizontal: Spacing.sm,

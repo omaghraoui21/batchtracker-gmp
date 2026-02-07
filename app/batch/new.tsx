@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { ProductSelector } from '@/components/ProductSelector';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
@@ -23,9 +24,11 @@ import { logBatchCreation, logDraftBatchCreation, logQRGeneration } from '@/lib/
 import { assignBatchAutomatically } from '@/lib/assignmentEngine';
 
 type WorkflowTemplate = Database['public']['Tables']['workflow_templates']['Row'];
+type Product = Database['public']['Tables']['products']['Row'];
 
 interface BatchFormData {
   batchNumber: string;
+  productId: string | null;
   productName: string;
   dossierType: 'production' | 'packaging' | 'quality' | 'research';
   manufacturingDate: Date;
@@ -48,6 +51,7 @@ export default function NewBatchScreen() {
 
   const [formData, setFormData] = useState<BatchFormData>({
     batchNumber: '',
+    productId: null,
     productName: '',
     dossierType: 'production',
     manufacturingDate: new Date(),
@@ -56,6 +60,7 @@ export default function NewBatchScreen() {
     workflowTemplateId: '',
     priority: 'normal',
   });
+  const [productError, setProductError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchWorkflowTemplates();
@@ -210,6 +215,7 @@ export default function NewBatchScreen() {
           .from('batches')
           .insert({
             batch_number: formData.batchNumber,
+            product_id: formData.productId,
             product_name: formData.productName,
             dossier_type: formData.dossierType,
             manufacturing_date: formData.manufacturingDate.toISOString(),
@@ -328,8 +334,9 @@ export default function NewBatchScreen() {
         Alert.alert('Erreur', 'Le numéro de lot n\'est pas valide');
         return;
       }
-      if (!formData.productName.trim()) {
-        Alert.alert('Erreur', 'Veuillez saisir un nom de produit');
+      if (!formData.productId || !formData.productName.trim()) {
+        setProductError('Veuillez sélectionner un produit');
+        Alert.alert('Erreur', 'Veuillez sélectionner un produit dans le catalogue');
         return;
       }
       if (!formData.workflowTemplateId) {
@@ -354,6 +361,7 @@ export default function NewBatchScreen() {
             .from('batches')
             .insert({
               batch_number: formData.batchNumber,
+              product_id: formData.productId,
               product_name: formData.productName,
               dossier_type: formData.dossierType,
               workflow_template_id: formData.workflowTemplateId,
@@ -585,15 +593,20 @@ export default function NewBatchScreen() {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>
-                Nom du Produit <Text style={styles.required}>*</Text>
+                Produit <Text style={styles.required}>*</Text>
               </Text>
-              <TextInput
-                style={styles.input}
-                value={formData.productName}
-                onChangeText={(text) => setFormData({ ...formData, productName: text })}
-                placeholder="Ex: Comprimé XYZ 500mg"
-                placeholderTextColor={Colors.text.tertiary}
-                editable={!loading}
+              <ProductSelector
+                selectedProductId={formData.productId}
+                onSelectProduct={(product) => {
+                  setFormData({
+                    ...formData,
+                    productId: product.id,
+                    productName: product.product_name,
+                  });
+                  setProductError(null);
+                }}
+                error={productError}
+                disabled={loading}
               />
             </View>
 

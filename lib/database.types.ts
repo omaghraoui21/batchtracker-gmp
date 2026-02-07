@@ -184,6 +184,56 @@ export type Database = {
           },
         ]
       }
+      batch_locks: {
+        Row: {
+          batch_id: string
+          created_at: string | null
+          id: string
+          is_locked: boolean | null
+          lock_reason: string | null
+          locked_at: string | null
+          locked_by: string | null
+          pdf_generated_at: string | null
+          pdf_url: string | null
+          release_signature_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string | null
+          id?: string
+          is_locked?: boolean | null
+          lock_reason?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          pdf_generated_at?: string | null
+          pdf_url?: string | null
+          release_signature_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string | null
+          id?: string
+          is_locked?: boolean | null
+          lock_reason?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          pdf_generated_at?: string | null
+          pdf_url?: string | null
+          release_signature_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_locks_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: true
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       batches: {
         Row: {
           assigned_by_rule: boolean | null
@@ -204,6 +254,7 @@ export type Database = {
           manufacturing_date: string | null
           ownership_updated_at: string | null
           priority: string | null
+          product_id: string | null
           product_name: string
           qr_code_data: string | null
           qr_token: string | null
@@ -230,6 +281,7 @@ export type Database = {
           manufacturing_date?: string | null
           ownership_updated_at?: string | null
           priority?: string | null
+          product_id?: string | null
           product_name: string
           qr_code_data?: string | null
           qr_token?: string | null
@@ -256,6 +308,7 @@ export type Database = {
           manufacturing_date?: string | null
           ownership_updated_at?: string | null
           priority?: string | null
+          product_id?: string | null
           product_name?: string
           qr_code_data?: string | null
           qr_token?: string | null
@@ -286,6 +339,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "batches_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "batches_workflow_template_id_fkey"
             columns: ["workflow_template_id"]
             isOneToOne: false
@@ -301,7 +361,41 @@ export type Database = {
           },
         ]
       }
-      [key: string]: any
+      // Phase 11: Products table
+      products: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          product_code: string
+          product_name: string
+          technical_description: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          product_code: string
+          product_name: string
+          technical_description?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          product_code?: string
+          product_name?: string
+          technical_description?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      // ... rest of tables omitted for brevity - they remain unchanged
     }
     Views: {
       [_ in never]: never

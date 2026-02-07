@@ -27,7 +27,10 @@ export type AuditAction =
   | 'DEVIATION_ADDED'     // Phase 9: Deviation logged
   | 'LOT_CREATED_DRAFT'   // Phase 10: Draft batch created
   | 'QR_GENERATED'        // Phase 10: QR token generated
-  | 'AUTO_ASSIGNED';      // Phase 10: Batch auto-assigned by rule
+  | 'AUTO_ASSIGNED'       // Phase 10: Batch auto-assigned by rule
+  | 'PRODUCT_ADDED'       // Phase 11: Product added to catalog
+  | 'PRODUCT_MODIFIED'    // Phase 11: Product modified in catalog
+  | 'PRODUCT_ARCHIVED';   // Phase 11: Product archived (set inactive)
 
 export type AuditModule =
   | 'BATCH'
@@ -38,6 +41,7 @@ export type AuditModule =
   | 'WORKFLOW'
   | 'EQUIPMENT'
   | 'TRAINING'
+  | 'PRODUCT'             // Phase 11: Product catalog module
   | 'SYSTEM';
 
 export interface AuditLogEntry {
@@ -513,5 +517,81 @@ export async function logAutoAssignment(
       ruleType,
       automatic: true,
     },
+  });
+}
+
+/**
+ * Phase 11: Log product addition to catalog
+ */
+export async function logProductAdded(
+  productId: string,
+  productCode: string,
+  productName: string,
+  userId: string,
+  userName: string,
+  userRole: string
+): Promise<void> {
+  await logAudit({
+    action: 'PRODUCT_ADDED',
+    module: 'PRODUCT',
+    entity_type: 'product',
+    entity_id: productId,
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    description: `Produit ${productCode} - ${productName} ajouté au catalogue`,
+    new_value: JSON.stringify({ productCode, productName }),
+    metadata: { productCode, productName },
+  });
+}
+
+/**
+ * Phase 11: Log product modification in catalog
+ */
+export async function logProductModified(
+  productId: string,
+  productCode: string,
+  userId: string,
+  userName: string,
+  userRole: string,
+  changes: Record<string, any>
+): Promise<void> {
+  await logAudit({
+    action: 'PRODUCT_MODIFIED',
+    module: 'PRODUCT',
+    entity_type: 'product',
+    entity_id: productId,
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    description: `Produit ${productCode} modifié`,
+    new_value: JSON.stringify(changes),
+    metadata: { productCode, changes },
+  });
+}
+
+/**
+ * Phase 11: Log product archiving (set inactive)
+ */
+export async function logProductArchived(
+  productId: string,
+  productCode: string,
+  productName: string,
+  userId: string,
+  userName: string,
+  userRole: string
+): Promise<void> {
+  await logAudit({
+    action: 'PRODUCT_ARCHIVED',
+    module: 'PRODUCT',
+    entity_type: 'product',
+    entity_id: productId,
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole,
+    description: `Produit ${productCode} - ${productName} archivé (inactif)`,
+    old_value: 'active',
+    new_value: 'inactive',
+    metadata: { productCode, productName, archived: true },
   });
 }

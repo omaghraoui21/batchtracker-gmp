@@ -124,7 +124,8 @@ export default function AdminScreen() {
           icon: 'cube-outline',
           title: 'Produits',
           subtitle: 'Catalogue de produits',
-          onPress: () => Alert.alert('Produits', 'Gestion du catalogue'),
+          onPress: () => router.push('/products'),
+          color: '#0047AB', // Blue Cobalt
         },
       ],
     },
