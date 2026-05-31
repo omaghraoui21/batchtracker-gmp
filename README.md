@@ -1,50 +1,68 @@
-# Welcome to your Fastshot app
+# BatchTracker GMP
 
-This is an [Expo](https://expo.dev) project created with [Fastshot](https://fastshot.ai), an AI-powered mobile development platform that helps you build React Native apps faster.
+Open-source MVP for batch tracking workflows in pharmaceutical manufacturing.
 
-## Running locally:
+This project is maintained by Omar Maghraoui, a pharmacist, industrial production manager, and AI-assisted software builder. The goal is to turn real manufacturing pain points into practical open-source tools for batch visibility, GMP workflow discipline, and daily production follow-up.
 
-1. Install dependencies
+## Why this project exists
 
-   ```bash
-   npm install
-   ```
+Many production teams still manage batch progress, shift notes, holds, and handovers across paper forms, spreadsheets, and informal messages. BatchTracker GMP explores a lightweight mobile-first workflow for tracking batch status and operational events in a way that is simple, auditable, and understandable by production teams.
 
-2. Start the app
+## Current MVP
 
-   ```bash
-   npx expo start
-   ```
+The current app is an Expo / React Native starter focused on:
 
-## Need help?
+- Batch list and batch status tracking
+- Production-friendly mobile workflow
+- Operator and supervisor use cases
+- Future GMP review notes and audit-support fields
 
-Have questions or want to iterate on your app? Head back to [Fastshot](https://fastshot.ai) to continue chatting with our AI agents. They can help you:
+This is not validated GMP software. It is an open-source learning and decision-support project. Any regulated use would require formal site validation, QA approval, access control review, and data-integrity assessment.
 
-- Add new features and screens
-- Debug issues and fix bugs
-- Refactor and improve your code
-- Integrate APIs and third-party libraries
+## Target users
 
-## Learn more
+- Pharmaceutical production managers
+- Shift supervisors
+- Operators
+- Process engineers
+- Quality and operational excellence teams
+- Developers interested in industrial open-source tools
 
-To learn more about developing your project, check out these resources:
+## Product vision
 
-### Fastshot Resources
-- [Fastshot Platform](https://fastshot.ai): Build and iterate on your mobile apps with AI assistance
-- [Fastshot Documentation](https://fastshot.ai/docs): Learn how to make the most of AI-powered development
-- [Fastshot Community](https://fastshot.ai/community): Connect with other developers building with Fastshot
+BatchTracker GMP aims to become a practical open-source toolkit for:
 
-### Expo Resources
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- Batch progress tracking
+- Shift handover support
+- Production event logging
+- Batch status dashboards
+- GMP workflow checklists
+- AI-assisted draft summaries for production review
 
-## Join the community
+## Run locally
 
-Join our community of developers building the future of mobile development with AI:
+```bash
+npm install
+npx expo start
+```
 
-- **[Fastshot Discord](https://fastshot.ai/discord)**: Get help, share your projects, and connect with other Fastshot users
-- **[Fastshot on GitHub](https://github.com/fastshot-ai)**: Contribute to our open source tools and integrations
+## Open-source roadmap
 
-You can also join the broader Expo community:
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+See [roadmap.md](roadmap.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Maintainer
+
+Omar Maghraoui
+
+- Pharmacist
+- Pharmaceutical production manager
+- Industrial operations builder
+- AI-assisted / vibe coder learning software engineering in public
+
+## License
+
+MIT
